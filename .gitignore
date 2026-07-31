@@ -11,3 +11,12 @@ take_profit_state.json
 # 不将本地浏览器、编辑器或自动化运行状态提交到远程
 .agent-browser/
 .workbuddy/
+
+# 分析草稿与调试产物不随补仓指导图发布
+README.md
+*.zip
+nul
+*_results.json
+opt_results.json
+latest_purchase_record_jungle.json
+purchase_record_state_jungle.json
