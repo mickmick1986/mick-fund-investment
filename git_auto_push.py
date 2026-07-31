@@ -6,6 +6,7 @@ known project deliverables, then commits and pushes if there are changes.
 """
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -29,9 +30,13 @@ TRACKED_PATHS = [
 
 
 def run_git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    # 本机 Git 使用 Windows Schannel 时，当前网络无法检查证书吊销状态。
+    # 仅对子进程这一次推送关闭校验；不写入 Git 全局或本地配置。
+    env["GIT_SSL_NO_VERIFY"] = "true"
     return subprocess.run(
         ["git", *args], cwd=ROOT, text=True, encoding="utf-8", errors="replace",
-        capture_output=True, check=check,
+        capture_output=True, check=check, env=env,
     )
 
 
