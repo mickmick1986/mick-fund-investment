@@ -15,7 +15,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 SOURCE_HTML = ROOT / "金字塔丛林补仓指导图.html"
 PAGES_HTML = ROOT / "deploy" / "index.html"
-EXCEL = ROOT / "基金模板（金字塔丛林版）.xlsx"
 TRACKED_PATHS = [
     ".github/workflows/deploy.yml",
     ".gitignore",
@@ -24,7 +23,6 @@ TRACKED_PATHS = [
     "enrich_fund_data_v2.py",
     "fill_excel_combined.py",
     "fund_data_enriched.json",
-    "基金模板（金字塔丛林版）.xlsx",
     "金字塔丛林补仓指导图.html",
     "deploy/index.html",
 ]
@@ -41,10 +39,9 @@ def main() -> int:
     if not (ROOT / ".git").is_dir():
         print("未初始化 Git 仓库：请先完成首次 GitHub 仓库连接。", file=sys.stderr)
         return 2
-    for path in (SOURCE_HTML, EXCEL):
-        if not path.is_file():
-            print(f"缺少待发布文件：{path.name}", file=sys.stderr)
-            return 2
+    if not SOURCE_HTML.is_file():
+        print(f"缺少待发布文件：{SOURCE_HTML.name}", file=sys.stderr)
+        return 2
 
     PAGES_HTML.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(SOURCE_HTML, PAGES_HTML)

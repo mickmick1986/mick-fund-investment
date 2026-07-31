@@ -12,6 +12,9 @@ take_profit_state.json
 .agent-browser/
 .workbuddy/
 
+# 不上传含个人持仓、锚点与交易记录的本地 Excel
+基金模板（金字塔丛林版）.xlsx
+
 # 分析草稿与调试产物不随补仓指导图发布
 README.md
 *.zip
