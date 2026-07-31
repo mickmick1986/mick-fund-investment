@@ -1,0 +1,1482 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>金字塔丛林补仓指导图 (2026-07-28)</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  background: #eef2f5;
+  color: #333;
+  line-height: 1.5;
+  padding: 16px;
+  font-size: 13px;
+}
+.container { max-width: 1800px; margin: 0 auto; }
+
+.top-bar {
+  background: linear-gradient(135deg, #1e3a5f 0%, #2c5282 100%);
+  color: #fff;
+  padding: 14px 24px;
+  border-radius: 10px 10px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.top-bar .main-title { font-size: 18px; font-weight: bold; letter-spacing: 1px; }
+.top-bar .stats { font-size: 14px; opacity: 0.95; }
+.top-bar .highlight { color: #ffd700; font-weight: bold; }
+
+.market-bar {
+  background: #e8f0f8;
+  padding: 10px 24px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: center;
+  border-bottom: 2px solid #d0dce8;
+}
+.market-bar .m-item { display: flex; align-items: baseline; gap: 6px; }
+.market-bar .m-label { font-size: 14px; color: #000; font-weight: bold; }
+.market-bar .m-val { font-size: 13px; font-weight: bold; color: #1a365d; }
+.market-bar .m-change { font-size: 12px; font-weight: normal; margin-left: 4px; }
+.market-bar .m-change.up { color: #c62828; }
+.market-bar .m-change.down { color: #2e7d32; }
+.market-bar .m-change.flat { color: #7f8c8d; }
+.market-bar .fg-badge { display: inline-block; padding: 1px 6px; border-radius: 10px; font-size: 11px; font-weight: normal; margin-left: 4px; color: #fff; }
+.market-bar .fg-badge.fg-extreme-fear { background: #1E3F1F; }
+.market-bar .fg-badge.fg-fear { background: #5C9A58; }
+.market-bar .fg-badge.fg-neutral { background: #3B6FA8; }
+.market-bar .fg-badge.fg-greed { background: #B86060; }
+.market-bar .fg-badge.fg-extreme-greed { background: #6B2020; }
+
+.table-wrap {
+  background: #fff;
+  border-radius: 0 0 10px 10px;
+  overflow-x: auto;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  min-width: 1500px;
+}
+
+thead { background: #2c3e50; color: #fff; }
+.region-row th {
+  padding: 7px 4px;
+  font-size: 14px;
+  font-weight: bold;
+  text-align: center;
+  border-right: 1px solid rgba(255,255,255,0.10);
+}
+.region-info { background: #556572; color: #fff; }
+.region-indicators { background: #526B58; color: #fff; }
+.region-buy { background: #8B7355; color: #fff; }
+.region-tp { background: #DBA9B5; color: #fff; }
+
+.header-row th {
+  padding: 8px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  white-space: nowrap;
+  border-right: 1px solid rgba(255,255,255,0.10);
+  line-height: 1.4;
+}
+.header-row th:last-child { border-right: none; }
+
+/* 版块分隔线：加深版块边界的视觉区分 */
+col.section-divider { border-left: 2.5px solid rgba(0,0,0,0.10); }
+
+tbody tr { border-bottom: 2px solid #d5dae0; transition: background 0.12s; }
+tbody tr:hover { background: rgba(0,0,0,0.03); }
+tbody tr.row-watch { background: #FFFBEA; }
+tbody tr.row-watch:hover { background: #FFF6D6; }
+
+tbody td {
+  padding: 7px 4px;
+  text-align: center;
+  font-size: 12px;
+  border-right: 1px solid rgba(0,0,0,0.04);
+  vertical-align: middle;
+}
+tbody td:last-child { border-right: none; }
+
+.col-cat { min-width: 72px; font-weight: 500; color: #555; font-size: 11.5px; }
+.col-code { min-width: 60px; color: #7f8c8d; font-size: 12px; font-family: monospace; }
+.col-name { min-width: 165px; text-align: left; padding-left: 8px; font-weight: 500; color: #2c3e50; font-size: 14px; }
+.col-dd { min-width: 68px; font-weight: bold; }
+.col-dd .pct { font-size: 13px; }
+.col-rsi { min-width: 140px; }
+.col-val { min-width: 95px; line-height: 1.4; font-size: 11.5px; }
+.col-action { min-width: 88px; }
+.col-level-combined { min-width: 115px; white-space: nowrap; }
+.col-change { min-width: 68px; }
+.col-q { min-width: 78px; }
+.col-shares { min-width: 52px; }
+.col-price { min-width: 48px; color: #666; }
+.col-final-mult { min-width: 60px; }
+.col-amount { min-width: 72px; }
+.col-date { min-width: 82px; font-size: 11px; }
+.col-nav { min-width: 72px; font-family: monospace; }
+.col-x { min-width: 72px; }
+.col-x .pct { font-size: 14px; }
+.col-tp { min-width: 95px; }
+
+.pct { font-weight: bold; font-family: monospace; font-size: 13px; }
+.pct.up { color: #e74c3c; }
+.pct.down { color: #27ae60; }
+.pct.flat { color: #95a5a6; }
+
+.text-green { color: #27ae60; font-weight: bold; }
+.text-red { color: #e74c3c; font-weight: bold; }
+.text-orange { color: #e67e22; font-weight: bold; }
+.text-gray { color: #95a5a6; }
+.small { font-size: 11px; }
+
+.level-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: bold;
+  white-space: nowrap;
+}
+.level-extreme-3 { background: #fadbd8; color: #922b21; border: 1px solid #c0392b; }
+.level-extreme-2 { background: #f5b7b1; color: #922b21; border: 1px solid #c0392b; }
+.level-extreme-1 { background: #fdf2f2; color: #c0392b; border: 1px solid #e74c3c; }
+.level-5 { background: #fef5e7; color: #d35400; border: 1px solid #e67e22; }
+.level-4 { background: #fef9e7; color: #b7950b; border: 1px solid #f1c40f; }
+.level-3 { background: #eafaf1; color: #1e8449; border: 1px solid #2ecc71; }
+.level-2 { background: #ebf5fb; color: #2471a3; border: 1px solid #3498db; }
+.level-1 { background: #f2f3f4; color: #7f8c8d; border: 1px solid #95a5a6; }
+
+.level-mult { font-size: 11px; opacity: 0.85; }
+
+.rsi-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: bold;
+  white-space: nowrap;
+}
+.rsi-extreme { background: #1b5e20; color: #fff; }
+.rsi-oversold { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+.rsi-weak { color: #3498db; }
+.rsi-neutral { color: #666; }
+.rsi-overbought { background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
+
+.rsi-wrap { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.rsi-cell-wrap { display: flex; flex-direction: row; align-items: center; gap: 5px; }
+.rsi-sig-inline { flex-shrink: 0; }
+
+.action-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: bold;
+  white-space: nowrap;
+}
+
+.mult-val { font-weight: bold; color: #1a5276; font-size: 13px; }
+.guide-mult { font-weight: bold; color: #1a5276; font-size: 15px; }
+.shares-val { font-weight: bold; color: #1b5e20; font-size: 13px; }
+.amt-val { font-weight: bold; color: #333; font-size: 14px; }
+
+.tp-text { color: #8B0000; font-weight: bold; font-size: 11.5px; }
+
+.footer {
+  margin-top: 12px;
+  padding: 10px 16px;
+  background: #fff;
+  border-radius: 8px;
+  font-size: 11.5px;
+  color: #666;
+  line-height: 1.8;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+.footer strong { color: #444; }
+
+@media (max-width: 768px) {
+  body { padding: 8px; }
+  .top-bar { flex-direction: column; align-items: flex-start; }
+}
+.live-est {
+  color: #E67E22 !important;
+  font-size: 12px;
+}
+.live-est .live-tag {
+  display: block;
+  font-size: 9px;
+  color: #999;
+  font-weight: normal;
+}
+.live-indicator {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #E67E22;
+  margin-right: 4px;
+  animation: live-pulse 2s infinite;
+}
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+</style>
+<script>
+// ========== 实时数据引擎 ==========
+var LIVE_INTERVAL = 30 * 1000;     // 默认30秒（14:30-15:00）
+var SLOW_INTERVAL = 5 * 60 * 1000; // 盘中慢速5分钟
+var COUNTDOWN_START = 60;          // 页面刷新倒计时
+
+// 从表格行解析基金数据
+var funds = [];
+(function initFunds() {
+  var rows = document.querySelectorAll('tbody tr');
+  rows.forEach(function(row) {
+    var code = row.getAttribute('data-code');
+    if (!code) return;
+    funds.push({
+      code: code,
+      row: row,
+      peak: parseFloat(row.getAttribute('data-d')) || 0,
+      nav: parseFloat(row.getAttribute('data-e')) || 0,
+      anchor: parseFloat(row.getAttribute('data-o')) || 0,
+      trough: parseFloat(row.getAttribute('data-w')) || 0
+    });
+  });
+})();
+
+// JSONP获取单个基金实时估值
+function fetchEstimate(code) {
+  return new Promise(function(resolve) {
+    var called = false;
+    var timer = setTimeout(function() {
+      if (!called) { called = true; resolve(null); }
+    }, 5000);
+    window.jsonpgz = function(data) {
+      if (!called) {
+        called = true;
+        clearTimeout(timer);
+        resolve(data);
+        delete window.jsonpgz;
+      }
+    };
+    var script = document.createElement('script');
+    script.src = 'https://fundgz.1234567.com.cn/js/' + code + '.js?rt=' + Date.now();
+    script.onerror = function() {
+      if (!called) { called = true; clearTimeout(timer); resolve(null); delete window.jsonpgz; }
+    };
+    document.head.appendChild(script);
+    setTimeout(function() {
+      if (script.parentNode) script.parentNode.removeChild(script);
+    }, 6000);
+  });
+}
+
+// 更新表格中的涨跌幅和回撤
+function updateCell(fd, data) {
+  if (!data || !data.gszzl) return;
+  var gszzl = parseFloat(data.gszzl);
+  var row = fd.row;
+  
+  // 更新F列-当日涨跌
+  var changeCell = row.querySelector('.live-change');
+  if (changeCell) {
+    var sign = gszzl >= 0 ? '+' : '';
+    var cls = gszzl > 0 ? 'up' : (gszzl < 0 ? 'down' : 'flat');
+    changeCell.innerHTML = '<span class="pct ' + cls + ' live-est">' + sign + gszzl.toFixed(2) + '%<span class="live-tag"><span class="live-indicator"></span>实时估算</span></span>';
+    changeCell.setAttribute('data-live', '1');
+  }
+  
+  // 更新G列-峰值回撤（基于实时估算净值重算）
+  if (fd.peak > 0 && fd.nav > 0) {
+    var estNav = fd.nav * (1 + gszzl / 100);
+    var newDD = (fd.peak - estNav) / fd.peak * 100;
+    var ddCell = row.querySelector('.live-dd');
+    if (ddCell) {
+      var ddCls = newDD < 0 ? 'up' : 'down';
+      ddCell.innerHTML = '<span class="pct ' + ddCls + ' live-est">' + newDD.toFixed(2) + '%</span>';
+      ddCell.setAttribute('data-live', '1');
+    }
+  }
+}
+
+// 批量获取所有基金实时数据
+async function updateAllFunds() {
+  for (var i = 0; i < funds.length; i++) {
+    try {
+      var data = await fetchEstimate(funds[i].code);
+      updateCell(funds[i], data);
+    } catch(e) {}
+    // 避免请求过快，间隔200ms
+    if (i < funds.length - 1) {
+      await new Promise(function(r) { setTimeout(r, 200); });
+    }
+  }
+}
+
+// 时间调速逻辑
+function isTradingDay() {
+  var d = new Date();
+  var day = d.getDay();
+  return day >= 1 && day <= 5;
+}
+
+function getRefreshMode() {
+  if (!isTradingDay()) return 'off';
+  var now = new Date();
+  var h = now.getHours();
+  var m = now.getMinutes();
+  var total = h * 60 + m;
+  
+  // 9:30-11:30 上午盘中 → 慢速
+  if (total >= 570 && total <= 690) return 'slow';
+  // 13:00-14:29 下午前段 → 慢速
+  if (total >= 780 && total < 870) return 'slow';
+  // 14:30-15:00 高频窗口 → 快速
+  if (total >= 870 && total <= 900) return 'fast';
+  // 盘后 → 停止实时拉取，等页面刷新
+  return 'off';
+}
+
+// 主循环
+var countdown = COUNTDOWN_START;
+var lastMode = '';
+
+function mainLoop() {
+  var mode = getRefreshMode();
+  var statusEl = document.getElementById('live-status');
+  var timerEl = document.getElementById('refresh-timer');
+  var ddCells = document.querySelectorAll('.live-dd');
+  var chCells = document.querySelectorAll('.live-change');
+  
+  if (mode === 'fast') {
+    if (statusEl) statusEl.textContent = '⚡实时 30s';
+    if (statusEl) statusEl.style.color = '#E67E22';
+    updateAllFunds();
+    setTimeout(mainLoop, LIVE_INTERVAL);
+    countdown = COUNTDOWN_START;
+  } else if (mode === 'slow') {
+    if (statusEl) statusEl.textContent = '🔄盘中 5min';
+    if (statusEl) statusEl.style.color = '#3498db';
+    updateAllFunds();
+    setTimeout(mainLoop, SLOW_INTERVAL);
+    countdown = COUNTDOWN_START;
+  } else {
+    // 盘后：恢复静态颜色 + 页面倒计时刷新
+    if (statusEl) statusEl.textContent = '⏳盘后';
+    if (statusEl) statusEl.style.color = '#7f8c8d';
+    
+    // 恢复静态样式
+    ddCells.forEach(function(c) {
+      if (c.getAttribute('data-live') === '1') {
+        c.querySelectorAll('.live-est').forEach(function(s) {
+          s.classList.remove('live-est');
+        });
+        c.setAttribute('data-live', '0');
+      }
+    });
+    chCells.forEach(function(c) {
+      if (c.getAttribute('data-live') === '1') {
+        c.querySelectorAll('.live-est').forEach(function(s) {
+          s.classList.remove('live-est');
+        });
+        c.querySelectorAll('.live-tag').forEach(function(t) { t.remove(); });
+        c.setAttribute('data-live', '0');
+      }
+    });
+    
+    // 倒计时后整页刷新（盘后净值出来后获取最新数据）
+    countdown--;
+    if (timerEl) timerEl.textContent = countdown;
+    if (countdown < 0) location.reload();
+    setTimeout(mainLoop, 1000);
+  }
+}
+
+// 启动
+(function() {
+  var timerEl = document.getElementById('refresh-timer');
+  if (timerEl) timerEl.textContent = COUNTDOWN_START;
+})();
+setTimeout(mainLoop, 1000);
+</script>
+</head>
+<body>
+<div class="container">
+
+<div class="top-bar">
+  <div>
+    <span class="main-title">【2026-07-28补仓指导】</span>
+    <span style="font-size:11px;opacity:0.7;margin-left:12px;"><span id="live-status" style="margin-right:8px;">⏳盘后</span>⏱ <span id="refresh-timer">60</span>秒后刷新</span>
+    <span class="stats">25只基金 -- 需补仓<span class="highlight">17</span>只 -- 共<span class="highlight">347</span>份 -- ¥<span class="highlight">11,370</span></span>
+  </div>
+  <div style="font-size:12px;opacity:0.85;">数据更新: 2026-07-28 23:54:53</div>
+</div>
+
+<div class="market-bar">
+  <div class="m-item"><span class="m-label">市场状态</span><span class="m-val">调整期</span></div>
+<div class="m-item"><span class="m-label">上证指数</span><span class="m-val">3813<span class="m-change down">(较前日-1.16% -44.93)</span></span></div>
+<div class="m-item"><span class="m-label">200日线</span><span class="m-val">4014</span></div>
+<div class="m-item"><span class="m-label">上证RSI</span><span class="m-val">38.9</span></div>
+<div class="m-item"><span class="m-label">峰值回撤</span><span class="m-val" style="color:#27AE60">-10.1%</span></div>
+<div class="m-item"><span class="m-label">恐贪指数(07-28)</span><span class="m-val"><span class="fg-extreme-fear" style="color:#1E3F1F; font-weight:700;">8</span> <span class="fg-badge fg-extreme-fear">极度恐惧</span></span></div>
+<div class="m-item"><span class="m-label">北向(07-28)</span><span class="m-val"><span class="m-change down">-0.06亿</span></span></div>
+<div class="m-item"><span class="m-label">南向(07-28)</span><span class="m-val"><span class="m-change down">-0.25亿</span></span></div>
+<div class="m-item"><span class="m-label">融资余额(07-27)</span><span class="m-val">2.68万亿元 <span class="m-change up">+101亿</span><span style="color:#C62828; font-weight:700;">（加杠杆；资金进场）</span></span></div>
+  <div class="m-item" style="margin-left:auto;"><span class="m-label">说明</span><span class="m-val" style="font-weight:normal;color:#666;">市场回调中，止盈暂停，专注补仓</span></div>
+</div>
+
+<div class="table-wrap">
+<table>
+<colgroup>
+  <col class="col-basic" style="width:75px;background:#E8EDF2">
+  <col class="col-basic" style="width:62px;background:#E8EDF2">
+  <col class="col-basic" style="width:170px;background:#E8EDF2">
+  <col class="col-basic section-divider" style="width:70px;background:#E4EDE6">
+  <col class="col-basic" style="width:95px;background:#E4EDE6">
+  <col class="col-basic" style="width:100px;background:#E4EDE6">
+  <col class="col-basic" style="width:92px;background:#E4EDE6">
+  <col class="col-basic" style="width:140px;background:#E4EDE6">
+  <col class="col-buy section-divider" style="width:70px;background:#F0E9DD">
+  <col class="col-buy" style="width:80px;background:#F0E9DD">
+  <col class="col-buy" style="width:55px;background:#F0E9DD">
+  <col class="col-buy" style="width:50px;background:#F0E9DD">
+  <col class="col-buy" style="width:62px;background:#F0E9DD">
+  <col class="col-buy" style="width:75px;background:#F0E9DD">
+  <col class="col-tp section-divider" style="width:85px;background:#F9EEF1">
+  <col class="col-tp" style="width:75px;background:#F9EEF1">
+  <col class="col-tp" style="width:75px;background:#F9EEF1">
+  <col class="col-tp" style="width:100px;background:#F9EEF1">
+</colgroup>
+<thead>
+  <tr class="region-row">
+    <th colspan="3" class="region-info">基金信息</th>
+    <th colspan="5" class="region-indicators">三指标判断详情</th>
+    <th colspan="6" class="region-buy">当日补仓指引</th>
+    <th colspan="4" class="region-tp">近期止盈参考</th>
+  </tr>
+  <tr class="header-row">
+    <th>类型</th>
+    <th>代码</th>
+    <th style="text-align:left;">&nbsp;&nbsp;基金名称</th>
+    <th>总回撤</th>
+    <th>RSI(14)</th>
+    <th>PE/PB估值</th>
+    <th>操作建议</th>
+    <th>倍投等级</th>
+    <th>当日涨跌</th>
+    <th>近期总涨跌幅</th>
+    <th>补仓份数</th>
+    <th>补仓单价</th>
+    <th>补仓倍数</th>
+    <th>补仓金额</th>
+    <th>最近底谷日期</th>
+    <th>最近底谷净值</th>
+    <th>上涨幅度(最近)</th>
+    <th>止盈建议</th>
+  </tr>
+</thead>
+<tbody>
+<tr class="row-watch" data-code="000218" data-d="4.4715" data-e="3.1896" data-o="3.8354" data-w="3.1391">
+            <td class="col-cat">黄金</td>
+            <td class="col-code">000218</td>
+            <td class="col-name">国泰黄金ETF联接A</td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-29.70%</span></span></td>
+            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+      <svg width="88" height="34" style="display:block;margin:0 auto;">
+        <!-- 背景区域 -->
+        <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
+        <!-- 超卖区(0-30) 浅绿 -->
+        <rect x="4" y="22.2" width="82.0" height="7.8" fill="#e8f5e9" opacity="0.7"/>
+        <!-- 超买区(70-100) 浅红 -->
+        <rect x="4" y="4" width="82.0" height="7.8" fill="#ffebee" opacity="0.7"/>
+        <!-- 参考线 30 -->
+        <line x1="4" y1="22.2" x2="86.0" y2="22.2" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- 参考线 50 -->
+        <line x1="4" y1="17.0" x2="86.0" y2="17.0" stroke="#e0e0e0" stroke-width="0.3"/>
+        <!-- 参考线 70 -->
+        <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- RSI曲线 -->
+        <polyline points="4.0,15.3 6.6,15.0 9.3,15.0 11.9,14.6 14.6,15.4 17.2,23.1 19.9,22.7 22.5,23.6 25.2,22.8 27.8,21.1 30.5,21.8 33.1,20.8 35.7,17.8 38.4,16.8 41.0,19.7 43.7,20.4 46.3,20.4 49.0,20.4 51.6,18.8 54.3,18.4 56.9,18.6 59.5,16.6 62.2,17.8 64.8,19.0 67.5,17.8 70.1,14.6 72.8,15.3 75.4,19.9 78.1,21.1 80.7,18.4 83.4,19.6 86.0,20.2" fill="none" stroke="#4a90d9" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <!-- 最后一个点 -->
+        <circle cx="86.0" cy="20.2" r="1.8" fill="#4a90d9" stroke="#fff" stroke-width="0.5"/>
+      </svg>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-weak">偏弱</span></div></div></td>
+            <td class="col-val"><span class="text-gray small">商品基金无PE/PB估值</span></td>
+            <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
+            <td class="col-level-combined"><span class="level-badge level-3">倍投3级</span> <span class="mult-val">2倍</span></td>
+            <td class="col-change"><span class="live-change"><span class="pct down">-1.03%</span></span></td>
+            <td class="col-q"><span class="pct down">-17.87%</span></td>
+            <td class="col-shares"><span class="shares-val">0</span></td>
+            <td class="col-price">10</td>
+            <td class="col-final-mult"><span class="text-gray">0</span></td>
+            <td class="col-amount"><span class="text-gray">¥0</span></td>
+            <td class="col-date">2026-07-01</td>
+            <td class="col-nav">3.1391</td>
+            <td class="col-x"><span class="pct up">+0.58%</span></td>
+            <td class="col-tp"><span class="text-gray">—</span></td>
+        </tr>
+<tr class="" data-code="024194" data-d="1.9691" data-e="1.1902" data-o="1.1902" data-w="1.1804">
+            <td class="col-cat">商业航天</td>
+            <td class="col-code">024194</td>
+            <td class="col-name">永赢国证商用卫星通信产业ETF联接A</td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-43.22%</span></span></td>
+            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+      <svg width="88" height="34" style="display:block;margin:0 auto;">
+        <!-- 背景区域 -->
+        <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
+        <!-- 超卖区(0-30) 浅绿 -->
+        <rect x="4" y="22.2" width="82.0" height="7.8" fill="#e8f5e9" opacity="0.7"/>
+        <!-- 超买区(70-100) 浅红 -->
+        <rect x="4" y="4" width="82.0" height="7.8" fill="#ffebee" opacity="0.7"/>
+        <!-- 参考线 30 -->
+        <line x1="4" y1="22.2" x2="86.0" y2="22.2" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- 参考线 50 -->
+        <line x1="4" y1="17.0" x2="86.0" y2="17.0" stroke="#e0e0e0" stroke-width="0.3"/>
+        <!-- 参考线 70 -->
+        <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- RSI曲线 -->
+        <polyline points="4.0,16.9 6.6,18.2 9.3,19.2 11.9,14.9 14.6,13.3 17.2,16.8 19.9,16.9 22.5,16.6 25.2,17.3 27.8,15.5 30.5,13.8 33.1,11.3 35.7,14.0 38.4,12.6 41.0,15.0 43.7,16.4 46.3,18.1 49.0,17.1 51.6,14.9 54.3,16.8 56.9,18.6 59.5,19.3 62.2,20.4 64.8,21.4 67.5,23.4 70.1,22.4 72.8,22.2 75.4,23.4 78.1,23.3 80.7,21.9 83.4,22.0 86.0,23.9" fill="none" stroke="#27ae60" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <!-- 最后一个点 -->
+        <circle cx="86.0" cy="23.9" r="1.8" fill="#27ae60" stroke="#fff" stroke-width="0.5"/>
+      </svg>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-oversold">超卖</span></div></div></td>
+            <td class="col-val"><span class="text-gray small">指数PE/PB数据暂缺</span></td>
+            <td class="col-action"><span class="action-badge" style="color:#2E7D32;background:#C8E6C9;">建议补仓</span></td>
+            <td class="col-level-combined"><span class="level-badge level-4">倍投4级</span> <span class="mult-val">3倍</span></td>
+            <td class="col-change"><span class="live-change"><span class="pct down">-3.66%</span></span></td>
+            <td class="col-q"><span class="pct down">-3.66%</span></td>
+            <td class="col-shares"><span class="shares-val">3</span></td>
+            <td class="col-price">10</td>
+            <td class="col-final-mult"><span class="guide-mult">9</span></td>
+            <td class="col-amount"><span class="amt-val">¥90</span></td>
+            <td class="col-date">2026-07-20</td>
+            <td class="col-nav">1.1804</td>
+            <td class="col-x"><span class="pct down">-2.83%</span></td>
+            <td class="col-tp"><span class="text-gray">—</span></td>
+        </tr>
+<tr class="" data-code="024202" data-d="1.8609" data-e="1.2664" data-o="1.2664" data-w="1.2472">
+            <td class="col-cat">超导/核聚变</td>
+            <td class="col-code">024202</td>
+            <td class="col-name">永赢制造升级智选混合A</td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-35.52%</span></span></td>
+            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+      <svg width="88" height="34" style="display:block;margin:0 auto;">
+        <!-- 背景区域 -->
+        <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
+        <!-- 超卖区(0-30) 浅绿 -->
+        <rect x="4" y="22.2" width="82.0" height="7.8" fill="#e8f5e9" opacity="0.7"/>
+        <!-- 超买区(70-100) 浅红 -->
+        <rect x="4" y="4" width="82.0" height="7.8" fill="#ffebee" opacity="0.7"/>
+        <!-- 参考线 30 -->
+        <line x1="4" y1="22.2" x2="86.0" y2="22.2" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- 参考线 50 -->
+        <line x1="4" y1="17.0" x2="86.0" y2="17.0" stroke="#e0e0e0" stroke-width="0.3"/>
+        <!-- 参考线 70 -->
+        <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- RSI曲线 -->
+        <polyline points="4.0,13.1 6.6,12.4 9.3,11.7 11.9,8.4 14.6,8.5 17.2,9.7 19.9,10.2 22.5,10.5 25.2,12.6 27.8,11.7 30.5,11.8 33.1,12.2 35.7,15.1 38.4,15.2 41.0,18.1 43.7,21.5 46.3,23.6 49.0,23.9 51.6,24.7 54.3,25.3 56.9,25.1 59.5,25.8 62.2,25.6 64.8,25.8 67.5,27.6 70.1,26.3 72.8,26.0 75.4,25.2 78.1,24.9 80.7,22.7 83.4,22.2 86.0,23.9" fill="none" stroke="#27ae60" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <!-- 最后一个点 -->
+        <circle cx="86.0" cy="23.9" r="1.8" fill="#27ae60" stroke="#fff" stroke-width="0.5"/>
+      </svg>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-oversold">超卖</span></div></div></td>
+            <td class="col-val"><span class="text-gray small">主动基金无指数估值</span></td>
+            <td class="col-action"><span class="action-badge" style="color:#E65100;background:#FFEB9C;">可补仓</span></td>
+            <td class="col-level-combined"><span class="level-badge level-3">倍投3级</span> <span class="mult-val">2倍</span></td>
+            <td class="col-change"><span class="live-change"><span class="pct down">-3.57%</span></span></td>
+            <td class="col-q"><span class="pct down">-3.57%</span></td>
+            <td class="col-shares"><span class="shares-val">3</span></td>
+            <td class="col-price">10</td>
+            <td class="col-final-mult"><span class="guide-mult">6</span></td>
+            <td class="col-amount"><span class="amt-val">¥60</span></td>
+            <td class="col-date">2026-07-20</td>
+            <td class="col-nav">1.2472</td>
+            <td class="col-x"><span class="pct down">-2.03%</span></td>
+            <td class="col-tp"><span class="text-gray">—</span></td>
+        </tr>
+<tr class="" data-code="001475" data-d="2.378" data-e="2" data-o="2.378" data-w="1.955">
+            <td class="col-cat">军工</td>
+            <td class="col-code">001475</td>
+            <td class="col-name">易方达国防军工混合A</td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-20.81%</span></span></td>
+            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+      <svg width="88" height="34" style="display:block;margin:0 auto;">
+        <!-- 背景区域 -->
+        <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
+        <!-- 超卖区(0-30) 浅绿 -->
+        <rect x="4" y="22.2" width="82.0" height="7.8" fill="#e8f5e9" opacity="0.7"/>
+        <!-- 超买区(70-100) 浅红 -->
+        <rect x="4" y="4" width="82.0" height="7.8" fill="#ffebee" opacity="0.7"/>
+        <!-- 参考线 30 -->
+        <line x1="4" y1="22.2" x2="86.0" y2="22.2" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- 参考线 50 -->
+        <line x1="4" y1="17.0" x2="86.0" y2="17.0" stroke="#e0e0e0" stroke-width="0.3"/>
+        <!-- 参考线 70 -->
+        <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- RSI曲线 -->
+        <polyline points="4.0,20.9 6.6,22.1 9.3,19.5 11.9,17.3 14.6,16.6 17.2,11.8 19.9,11.5 22.5,12.3 25.2,11.4 27.8,7.6 30.5,7.4 33.1,6.8 35.7,9.8 38.4,9.6 41.0,9.8 43.7,10.8 46.3,12.6 49.0,12.2 51.6,15.4 54.3,17.2 56.9,17.9 59.5,19.5 62.2,20.0 64.8,22.6 67.5,25.0 70.1,21.4 72.8,20.7 75.4,21.5 78.1,22.3 80.7,21.0 83.4,22.0 86.0,24.1" fill="none" stroke="#27ae60" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <!-- 最后一个点 -->
+        <circle cx="86.0" cy="24.1" r="1.8" fill="#27ae60" stroke="#fff" stroke-width="0.5"/>
+      </svg>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-oversold">超卖</span></div></div></td>
+            <td class="col-val">PB=3.2<br><span class="text-orange small">适中</span></td>
+            <td class="col-action"><span class="action-badge" style="color:#7F8C8D;background:#EAEDED;">观望</span></td>
+            <td class="col-level-combined"><span class="level-badge level-1">倍投1级</span> <span class="mult-val">1倍</span></td>
+            <td class="col-change"><span class="live-change"><span class="pct down">-4.91%</span></span></td>
+            <td class="col-q"><span class="pct down">-20.81%</span></td>
+            <td class="col-shares"><span class="shares-val">0</span></td>
+            <td class="col-price">10</td>
+            <td class="col-final-mult"><span class="text-gray">0</span></td>
+            <td class="col-amount"><span class="text-gray">¥0</span></td>
+            <td class="col-date">2026-07-20</td>
+            <td class="col-nav">1.9550</td>
+            <td class="col-x"><span class="pct down">-2.61%</span></td>
+            <td class="col-tp"><span class="text-gray">—</span></td>
+        </tr>
+<tr class="" data-code="013477" data-d="1.3333" data-e="0.794" data-o="0.8226" data-w="0.7707">
+            <td class="col-cat">互金/金融IT</td>
+            <td class="col-code">013477</td>
+            <td class="col-name">华宝中证金融科技主题ETF联接A</td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-39.82%</span></span></td>
+            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+      <svg width="88" height="34" style="display:block;margin:0 auto;">
+        <!-- 背景区域 -->
+        <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
+        <!-- 超卖区(0-30) 浅绿 -->
+        <rect x="4" y="22.2" width="82.0" height="7.8" fill="#e8f5e9" opacity="0.7"/>
+        <!-- 超买区(70-100) 浅红 -->
+        <rect x="4" y="4" width="82.0" height="7.8" fill="#ffebee" opacity="0.7"/>
+        <!-- 参考线 30 -->
+        <line x1="4" y1="22.2" x2="86.0" y2="22.2" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- 参考线 50 -->
+        <line x1="4" y1="17.0" x2="86.0" y2="17.0" stroke="#e0e0e0" stroke-width="0.3"/>
+        <!-- 参考线 70 -->
+        <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- RSI曲线 -->
+        <polyline points="4.0,14.8 6.6,15.1 9.3,15.2 11.9,14.3 14.6,12.7 17.2,16.8 19.9,17.5 22.5,16.8 25.2,18.4 27.8,17.6 30.5,17.8 33.1,15.4 35.7,15.4 38.4,16.7 41.0,18.7 43.7,20.1 46.3,19.9 49.0,18.7 51.6,22.5 54.3,23.4 56.9,22.6 59.5,21.8 62.2,19.3 64.8,20.1 67.5,19.8 70.1,20.8 72.8,20.1 75.4,20.0 78.1,21.1 80.7,18.3 83.4,18.1 86.0,18.7" fill="none" stroke="#4a90d9" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <!-- 最后一个点 -->
+        <circle cx="86.0" cy="18.7" r="1.8" fill="#4a90d9" stroke="#fff" stroke-width="0.5"/>
+      </svg>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-weak">偏弱</span></div></div></td>
+            <td class="col-val">PE=31.3<br><span class="text-orange small">适中</span></td>
+            <td class="col-action"><span class="action-badge" style="color:#E65100;background:#FFEB9C;">可补仓</span></td>
+            <td class="col-level-combined"><span class="level-badge level-5">倍投5级</span> <span class="mult-val">4倍</span></td>
+            <td class="col-change"><span class="live-change"><span class="pct up">+0.63%</span></span></td>
+            <td class="col-q"><span class="pct down">-2.85%</span></td>
+            <td class="col-shares"><span class="shares-val">2</span></td>
+            <td class="col-price">10</td>
+            <td class="col-final-mult"><span class="guide-mult">8</span></td>
+            <td class="col-amount"><span class="amt-val">¥80</span></td>
+            <td class="col-date">2026-07-24</td>
+            <td class="col-nav">0.7707</td>
+            <td class="col-x"><span class="pct up">+3.65%</span></td>
+            <td class="col-tp"><span class="text-gray">—</span></td>
+        </tr>
+<tr class="" data-code="005453" data-d="3.4821" data-e="1.1367" data-o="1.2217" data-w="0.9073">
+            <td class="col-cat">A股+港股(医药均衡)</td>
+            <td class="col-code">005453</td>
+            <td class="col-name">前海开源医疗健康混合A</td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-69.15%</span></span></td>
+            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+      <svg width="88" height="34" style="display:block;margin:0 auto;">
+        <!-- 背景区域 -->
+        <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
+        <!-- 超卖区(0-30) 浅绿 -->
+        <rect x="4" y="22.2" width="82.0" height="7.8" fill="#e8f5e9" opacity="0.7"/>
+        <!-- 超买区(70-100) 浅红 -->
+        <rect x="4" y="4" width="82.0" height="7.8" fill="#ffebee" opacity="0.7"/>
+        <!-- 参考线 30 -->
+        <line x1="4" y1="22.2" x2="86.0" y2="22.2" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- 参考线 50 -->
+        <line x1="4" y1="17.0" x2="86.0" y2="17.0" stroke="#e0e0e0" stroke-width="0.3"/>
+        <!-- 参考线 70 -->
+        <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- RSI曲线 -->
+        <polyline points="4.0,21.5 6.6,22.7 9.3,24.2 11.9,22.4 14.6,24.4 17.2,18.9 19.9,15.7 22.5,14.2 25.2,15.2 27.8,10.1 30.5,10.6 33.1,10.2 35.7,9.8 38.4,9.6 41.0,8.8 43.7,10.2 46.3,11.3 49.0,11.6 51.6,11.0 54.3,11.9 56.9,11.7 59.5,10.9 62.2,11.0 64.8,16.0 67.5,14.7 70.1,14.8 72.8,15.2 75.4,16.3 78.1,17.3 80.7,15.4 83.4,15.4 86.0,16.5" fill="none" stroke="#4a90d9" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <!-- 最后一个点 -->
+        <circle cx="86.0" cy="16.5" r="1.8" fill="#4a90d9" stroke="#fff" stroke-width="0.5"/>
+      </svg>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-neutral">中性</span></div></div></td>
+            <td class="col-val">PE=33.5<br><span class="text-orange small">适中</span></td>
+            <td class="col-action"><span class="action-badge" style="color:#E65100;background:#FFEB9C;">可补仓</span></td>
+            <td class="col-level-combined"><span class="level-badge level-extreme-3">极限3级</span> <span class="mult-val">7倍</span></td>
+            <td class="col-change"><span class="live-change"><span class="pct down">-1.79%</span></span></td>
+            <td class="col-q"><span class="pct down">-8.75%</span></td>
+            <td class="col-shares"><span class="shares-val">8</span></td>
+            <td class="col-price">10</td>
+            <td class="col-final-mult"><span class="guide-mult">56</span></td>
+            <td class="col-amount"><span class="amt-val">¥560</span></td>
+            <td class="col-date">2026-06-09</td>
+            <td class="col-nav">0.9073</td>
+            <td class="col-x"><span class="pct up">+23.49%</span></td>
+            <td class="col-tp"><span class="text-gray">—</span></td>
+        </tr>
+<tr class="row-watch" data-code="008928" data-d="1.9384" data-e="1.3335" data-o="1.3443" data-w="1.2482">
+            <td class="col-cat">消费</td>
+            <td class="col-code">008928</td>
+            <td class="col-name">泰达宏利中证主要消费红利指数A</td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-29.50%</span></span></td>
+            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+      <svg width="88" height="34" style="display:block;margin:0 auto;">
+        <!-- 背景区域 -->
+        <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
+        <!-- 超卖区(0-30) 浅绿 -->
+        <rect x="4" y="22.2" width="82.0" height="7.8" fill="#e8f5e9" opacity="0.7"/>
+        <!-- 超买区(70-100) 浅红 -->
+        <rect x="4" y="4" width="82.0" height="7.8" fill="#ffebee" opacity="0.7"/>
+        <!-- 参考线 30 -->
+        <line x1="4" y1="22.2" x2="86.0" y2="22.2" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- 参考线 50 -->
+        <line x1="4" y1="17.0" x2="86.0" y2="17.0" stroke="#e0e0e0" stroke-width="0.3"/>
+        <!-- 参考线 70 -->
+        <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- RSI曲线 -->
+        <polyline points="4.0,13.3 6.6,13.7 9.3,15.5 11.9,16.5 14.6,16.8 17.2,24.8 19.9,24.7 22.5,24.4 25.2,25.3 27.8,22.1 30.5,22.7 33.1,20.8 35.7,19.9 38.4,20.9 41.0,20.5 43.7,20.3 46.3,19.1 49.0,19.0 51.6,17.8 54.3,17.5 56.9,16.0 59.5,13.7 62.2,11.5 64.8,14.2 67.5,11.7 70.1,14.3 72.8,14.7 75.4,15.3 78.1,18.1 80.7,15.6 83.4,14.8 86.0,12.3" fill="none" stroke="#4a90d9" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <!-- 最后一个点 -->
+        <circle cx="86.0" cy="12.3" r="1.8" fill="#4a90d9" stroke="#fff" stroke-width="0.5"/>
+      </svg>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-neutral">中性</span></div></div></td>
+            <td class="col-val">PE=20.6<br><span class="text-orange small">适中</span></td>
+            <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
+            <td class="col-level-combined"><span class="level-badge level-3">倍投3级</span> <span class="mult-val">2倍</span></td>
+            <td class="col-change"><span class="live-change"><span class="pct up">+1.71%</span></span></td>
+            <td class="col-q"><span class="pct up">+0.91%</span></td>
+            <td class="col-shares"><span class="shares-val">0</span></td>
+            <td class="col-price">10</td>
+            <td class="col-final-mult"><span class="text-gray">0</span></td>
+            <td class="col-amount"><span class="text-gray">¥0</span></td>
+            <td class="col-date">2026-06-26</td>
+            <td class="col-nav">1.2482</td>
+            <td class="col-x"><span class="pct up">+8.54%</span></td>
+            <td class="col-tp"><span class="text-gray">—</span></td>
+        </tr>
+<tr class="" data-code="003095" data-d="4.31" data-e="1.9193" data-o="2.1116" data-w="1.4955">
+            <td class="col-cat">CXO+创新药</td>
+            <td class="col-code">003095</td>
+            <td class="col-name">中欧医疗健康混合A</td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-58.11%</span></span></td>
+            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+      <svg width="88" height="34" style="display:block;margin:0 auto;">
+        <!-- 背景区域 -->
+        <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
+        <!-- 超卖区(0-30) 浅绿 -->
+        <rect x="4" y="22.2" width="82.0" height="7.8" fill="#e8f5e9" opacity="0.7"/>
+        <!-- 超买区(70-100) 浅红 -->
+        <rect x="4" y="4" width="82.0" height="7.8" fill="#ffebee" opacity="0.7"/>
+        <!-- 参考线 30 -->
+        <line x1="4" y1="22.2" x2="86.0" y2="22.2" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- 参考线 50 -->
+        <line x1="4" y1="17.0" x2="86.0" y2="17.0" stroke="#e0e0e0" stroke-width="0.3"/>
+        <!-- 参考线 70 -->
+        <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- RSI曲线 -->
+        <polyline points="4.0,21.7 6.6,23.1 9.3,24.6 11.9,23.4 14.6,24.9 17.2,14.2 19.9,11.0 22.5,10.0 25.2,11.0 27.8,7.0 30.5,7.3 33.1,6.9 35.7,6.9 38.4,6.8 41.0,6.9 43.7,9.4 46.3,10.8 49.0,10.6 51.6,10.3 54.3,11.3 56.9,11.2 59.5,10.5 62.2,10.6 64.8,15.7 67.5,14.6 70.1,15.3 72.8,15.5 75.4,16.3 78.1,17.5 80.7,15.6 83.4,15.8 86.0,17.5" fill="none" stroke="#4a90d9" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <!-- 最后一个点 -->
+        <circle cx="86.0" cy="17.5" r="1.8" fill="#4a90d9" stroke="#fff" stroke-width="0.5"/>
+      </svg>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-neutral">中性</span></div></div></td>
+            <td class="col-val">PE=28.8<br><span class="text-orange small">适中</span></td>
+            <td class="col-action"><span class="action-badge" style="color:#E65100;background:#FFEB9C;">可补仓</span></td>
+            <td class="col-level-combined"><span class="level-badge level-extreme-2">极限2级</span> <span class="mult-val">6倍</span></td>
+            <td class="col-change"><span class="live-change"><span class="pct down">-2.64%</span></span></td>
+            <td class="col-q"><span class="pct down">-11.75%</span></td>
+            <td class="col-shares"><span class="shares-val">11</span></td>
+            <td class="col-price">10</td>
+            <td class="col-final-mult"><span class="guide-mult">66</span></td>
+            <td class="col-amount"><span class="amt-val">¥660</span></td>
+            <td class="col-date">2026-06-08</td>
+            <td class="col-nav">1.4955</td>
+            <td class="col-x"><span class="pct up">+25.70%</span></td>
+            <td class="col-tp"><span class="text-gray">—</span></td>
+        </tr>
+<tr class="" data-code="011102" data-d="1.5245" data-e="0.6985" data-o="0.7234" data-w="0.6782">
+            <td class="col-cat">光伏</td>
+            <td class="col-code">011102</td>
+            <td class="col-name">天弘中证光伏产业指数A</td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-56.53%</span></span></td>
+            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+      <svg width="88" height="34" style="display:block;margin:0 auto;">
+        <!-- 背景区域 -->
+        <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
+        <!-- 超卖区(0-30) 浅绿 -->
+        <rect x="4" y="22.2" width="82.0" height="7.8" fill="#e8f5e9" opacity="0.7"/>
+        <!-- 超买区(70-100) 浅红 -->
+        <rect x="4" y="4" width="82.0" height="7.8" fill="#ffebee" opacity="0.7"/>
+        <!-- 参考线 30 -->
+        <line x1="4" y1="22.2" x2="86.0" y2="22.2" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- 参考线 50 -->
+        <line x1="4" y1="17.0" x2="86.0" y2="17.0" stroke="#e0e0e0" stroke-width="0.3"/>
+        <!-- 参考线 70 -->
+        <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- RSI曲线 -->
+        <polyline points="4.0,13.6 6.6,13.5 9.3,13.1 11.9,11.6 14.6,11.3 17.2,19.8 19.9,20.2 22.5,19.8 25.2,18.9 27.8,15.4 30.5,15.2 33.1,15.7 35.7,18.2 38.4,18.7 41.0,20.8 43.7,22.3 46.3,22.9 49.0,21.6 51.6,23.7 54.3,23.7 56.9,23.4 59.5,24.2 62.2,24.6 64.8,25.7 67.5,28.2 70.1,25.7 72.8,24.6 75.4,22.6 78.1,22.9 80.7,21.3 83.4,21.1 86.0,22.6" fill="none" stroke="#27ae60" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <!-- 最后一个点 -->
+        <circle cx="86.0" cy="22.6" r="1.8" fill="#27ae60" stroke="#fff" stroke-width="0.5"/>
+      </svg>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-oversold">超卖</span></div></div></td>
+            <td class="col-val">PB=3.8<br><span class="text-red small">高估</span></td>
+            <td class="col-action"><span class="action-badge" style="color:#E65100;background:#FFEB9C;">可补仓</span></td>
+            <td class="col-level-combined"><span class="level-badge level-extreme-1">极限1级</span> <span class="mult-val">5倍</span></td>
+            <td class="col-change"><span class="live-change"><span class="pct down">-2.35%</span></span></td>
+            <td class="col-q"><span class="pct down">-5.79%</span></td>
+            <td class="col-shares"><span class="shares-val">5</span></td>
+            <td class="col-price">10</td>
+            <td class="col-final-mult"><span class="guide-mult">25</span></td>
+            <td class="col-amount"><span class="amt-val">¥250</span></td>
+            <td class="col-date">2026-07-20</td>
+            <td class="col-nav">0.6782</td>
+            <td class="col-x"><span class="pct up">+0.64%</span></td>
+            <td class="col-tp"><span class="text-gray">—</span></td>
+        </tr>
+<tr class="" data-code="003984" data-d="3.8813" data-e="2.3399" data-o="2.3907" data-w="2.2003">
+            <td class="col-cat">锂电</td>
+            <td class="col-code">003984</td>
+            <td class="col-name">嘉实新能源新材料股票A</td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-41.87%</span></span></td>
+            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+      <svg width="88" height="34" style="display:block;margin:0 auto;">
+        <!-- 背景区域 -->
+        <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
+        <!-- 超卖区(0-30) 浅绿 -->
+        <rect x="4" y="22.2" width="82.0" height="7.8" fill="#e8f5e9" opacity="0.7"/>
+        <!-- 超买区(70-100) 浅红 -->
+        <rect x="4" y="4" width="82.0" height="7.8" fill="#ffebee" opacity="0.7"/>
+        <!-- 参考线 30 -->
+        <line x1="4" y1="22.2" x2="86.0" y2="22.2" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- 参考线 50 -->
+        <line x1="4" y1="17.0" x2="86.0" y2="17.0" stroke="#e0e0e0" stroke-width="0.3"/>
+        <!-- 参考线 70 -->
+        <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- RSI曲线 -->
+        <polyline points="4.0,14.1 6.6,13.1 9.3,11.7 11.9,11.4 14.6,10.9 17.2,17.6 19.9,15.9 22.5,15.6 25.2,17.7 27.8,16.0 30.5,16.3 33.1,15.4 35.7,16.4 38.4,17.8 41.0,18.7 43.7,19.4 46.3,21.2 49.0,21.2 51.6,24.1 54.3,23.8 56.9,24.7 59.5,24.5 62.2,23.5 64.8,24.9 67.5,27.3 70.1,26.0 72.8,25.9 75.4,22.8 78.1,23.0 80.7,21.7 83.4,20.5 86.0,20.5" fill="none" stroke="#4a90d9" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <!-- 最后一个点 -->
+        <circle cx="86.0" cy="20.5" r="1.8" fill="#4a90d9" stroke="#fff" stroke-width="0.5"/>
+      </svg>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-weak">偏弱</span></div></div></td>
+            <td class="col-val">PE=34.1<br><span class="text-orange small">适中</span></td>
+            <td class="col-action"><span class="action-badge" style="color:#E65100;background:#FFEB9C;">可补仓</span></td>
+            <td class="col-level-combined"><span class="level-badge level-4">倍投4级</span> <span class="mult-val">3倍</span></td>
+            <td class="col-change"><span class="live-change"><span class="pct down">-2.16%</span></span></td>
+            <td class="col-q"><span class="pct down">-4.28%</span></td>
+            <td class="col-shares"><span class="shares-val">4</span></td>
+            <td class="col-price">10</td>
+            <td class="col-final-mult"><span class="guide-mult">12</span></td>
+            <td class="col-amount"><span class="amt-val">¥120</span></td>
+            <td class="col-date">2026-07-20</td>
+            <td class="col-nav">2.2003</td>
+            <td class="col-x"><span class="pct up">+4.18%</span></td>
+            <td class="col-tp"><span class="text-gray">—</span></td>
+        </tr>
+<tr class="row-watch" data-code="010769" data-d="1.1129" data-e="0.7251" data-o="0.7339" data-w="0.6665">
+            <td class="col-cat">农业(种植养殖)</td>
+            <td class="col-code">010769</td>
+            <td class="col-name">天弘中证农业主题ETF联接A</td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-34.53%</span></span></td>
+            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+      <svg width="88" height="34" style="display:block;margin:0 auto;">
+        <!-- 背景区域 -->
+        <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
+        <!-- 超卖区(0-30) 浅绿 -->
+        <rect x="4" y="22.2" width="82.0" height="7.8" fill="#e8f5e9" opacity="0.7"/>
+        <!-- 超买区(70-100) 浅红 -->
+        <rect x="4" y="4" width="82.0" height="7.8" fill="#ffebee" opacity="0.7"/>
+        <!-- 参考线 30 -->
+        <line x1="4" y1="22.2" x2="86.0" y2="22.2" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- 参考线 50 -->
+        <line x1="4" y1="17.0" x2="86.0" y2="17.0" stroke="#e0e0e0" stroke-width="0.3"/>
+        <!-- 参考线 70 -->
+        <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- RSI曲线 -->
+        <polyline points="4.0,13.7 6.6,15.0 9.3,16.8 11.9,17.9 14.6,17.1 17.2,23.0 19.9,23.2 22.5,22.8 25.2,22.8 27.8,19.1 30.5,20.0 33.1,17.4 35.7,17.1 38.4,18.4 41.0,17.0 43.7,16.7 46.3,17.5 49.0,16.8 51.6,17.0 54.3,16.0 56.9,14.8 59.5,12.4 62.2,11.9 64.8,14.5 67.5,12.7 70.1,15.1 72.8,14.8 75.4,14.1 78.1,17.9 80.7,16.0 83.4,13.6 86.0,12.9" fill="none" stroke="#4a90d9" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <!-- 最后一个点 -->
+        <circle cx="86.0" cy="12.9" r="1.8" fill="#4a90d9" stroke="#fff" stroke-width="0.5"/>
+      </svg>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-neutral">中性</span></div></div></td>
+            <td class="col-val">PE=31.5<br><span class="text-red small">偏高</span></td>
+            <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
+            <td class="col-level-combined"><span class="level-badge level-4">倍投4级</span> <span class="mult-val">3倍</span></td>
+            <td class="col-change"><span class="live-change"><span class="pct up">+0.32%</span></span></td>
+            <td class="col-q"><span class="pct down">-0.88%</span></td>
+            <td class="col-shares"><span class="shares-val">0</span></td>
+            <td class="col-price">10</td>
+            <td class="col-final-mult"><span class="text-gray">0</span></td>
+            <td class="col-amount"><span class="text-gray">¥0</span></td>
+            <td class="col-date">2026-06-26</td>
+            <td class="col-nav">0.6665</td>
+            <td class="col-x"><span class="pct up">+9.11%</span></td>
+            <td class="col-tp"><span class="text-gray">—</span></td>
+        </tr>
+<tr class="" data-code="025832" data-d="1.5577" data-e="1.1076" data-o="1.1076" data-w="1.0944">
+            <td class="col-cat">电力设备</td>
+            <td class="col-code">025832</td>
+            <td class="col-name">天弘中证电网设备主题指数A</td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-32.95%</span></span></td>
+            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+      <svg width="88" height="34" style="display:block;margin:0 auto;">
+        <!-- 背景区域 -->
+        <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
+        <!-- 超卖区(0-30) 浅绿 -->
+        <rect x="4" y="22.2" width="82.0" height="7.8" fill="#e8f5e9" opacity="0.7"/>
+        <!-- 超买区(70-100) 浅红 -->
+        <rect x="4" y="4" width="82.0" height="7.8" fill="#ffebee" opacity="0.7"/>
+        <!-- 参考线 30 -->
+        <line x1="4" y1="22.2" x2="86.0" y2="22.2" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- 参考线 50 -->
+        <line x1="4" y1="17.0" x2="86.0" y2="17.0" stroke="#e0e0e0" stroke-width="0.3"/>
+        <!-- 参考线 70 -->
+        <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- RSI曲线 -->
+        <polyline points="4.0,12.9 6.6,12.4 9.3,11.9 11.9,9.8 14.6,9.4 17.2,14.5 19.9,14.9 22.5,14.4 25.2,16.5 27.8,15.9 30.5,16.9 33.1,17.0 35.7,17.9 38.4,17.8 41.0,19.8 43.7,22.5 46.3,23.4 49.0,23.1 51.6,26.3 54.3,26.5 56.9,25.3 59.5,26.4 62.2,26.1 64.8,26.3 67.5,27.3 70.1,25.1 72.8,24.8 75.4,22.7 78.1,23.0 80.7,20.9 83.4,21.0 86.0,22.3" fill="none" stroke="#27ae60" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <!-- 最后一个点 -->
+        <circle cx="86.0" cy="22.3" r="1.8" fill="#27ae60" stroke="#fff" stroke-width="0.5"/>
+      </svg>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-oversold">超卖</span></div></div></td>
+            <td class="col-val">PE=27.8<br><span class="text-orange small">适中</span></td>
+            <td class="col-action"><span class="action-badge" style="color:#E65100;background:#FFEB9C;">可补仓</span></td>
+            <td class="col-level-combined"><span class="level-badge level-3">倍投3级</span> <span class="mult-val">2倍</span></td>
+            <td class="col-change"><span class="live-change"><span class="pct down">-4.05%</span></span></td>
+            <td class="col-q"><span class="pct down">-4.05%</span></td>
+            <td class="col-shares"><span class="shares-val">4</span></td>
+            <td class="col-price">10</td>
+            <td class="col-final-mult"><span class="guide-mult">8</span></td>
+            <td class="col-amount"><span class="amt-val">¥80</span></td>
+            <td class="col-date">2026-07-20</td>
+            <td class="col-nav">1.0944</td>
+            <td class="col-x"><span class="pct down">-2.84%</span></td>
+            <td class="col-tp"><span class="text-gray">—</span></td>
+        </tr>
+<tr class="row-watch" data-code="004432" data-d="2.5089" data-e="1.7269" data-o="1.6299" data-w="1.6299">
+            <td class="col-cat">有色金属</td>
+            <td class="col-code">004432</td>
+            <td class="col-name">南方有色金属ETF联接A</td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-33.08%</span></span></td>
+            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+      <svg width="88" height="34" style="display:block;margin:0 auto;">
+        <!-- 背景区域 -->
+        <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
+        <!-- 超卖区(0-30) 浅绿 -->
+        <rect x="4" y="22.2" width="82.0" height="7.8" fill="#e8f5e9" opacity="0.7"/>
+        <!-- 超买区(70-100) 浅红 -->
+        <rect x="4" y="4" width="82.0" height="7.8" fill="#ffebee" opacity="0.7"/>
+        <!-- 参考线 30 -->
+        <line x1="4" y1="22.2" x2="86.0" y2="22.2" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- 参考线 50 -->
+        <line x1="4" y1="17.0" x2="86.0" y2="17.0" stroke="#e0e0e0" stroke-width="0.3"/>
+        <!-- 参考线 70 -->
+        <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- RSI曲线 -->
+        <polyline points="4.0,12.8 6.6,12.9 9.3,13.1 11.9,11.6 14.6,11.5 17.2,17.7 19.9,17.9 22.5,17.8 25.2,18.4 27.8,16.3 30.5,17.4 33.1,16.9 35.7,17.3 38.4,18.6 41.0,21.6 43.7,22.2 46.3,22.7 49.0,22.9 51.6,26.2 54.3,25.4 56.9,21.9 59.5,21.6 62.2,20.3 64.8,22.7 67.5,22.5 70.1,20.1 72.8,19.1 75.4,18.3 78.1,19.3 80.7,17.6 83.4,17.3 86.0,17.8" fill="none" stroke="#4a90d9" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <!-- 最后一个点 -->
+        <circle cx="86.0" cy="17.8" r="1.8" fill="#4a90d9" stroke="#fff" stroke-width="0.5"/>
+      </svg>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-neutral">中性</span></div></div></td>
+            <td class="col-val">PE=18.7<br><span class="text-red small">适中[PB首选不可用]</span></td>
+            <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
+            <td class="col-level-combined"><span class="level-badge level-3">倍投3级</span> <span class="mult-val">2倍</span></td>
+            <td class="col-change"><span class="live-change"><span class="pct down">-1.91%</span></span></td>
+            <td class="col-q"><span class="pct up">+4.04%</span></td>
+            <td class="col-shares"><span class="shares-val">0</span></td>
+            <td class="col-price">10</td>
+            <td class="col-final-mult"><span class="text-gray">0</span></td>
+            <td class="col-amount"><span class="text-gray">¥0</span></td>
+            <td class="col-date">2026-07-20</td>
+            <td class="col-nav">1.6299</td>
+            <td class="col-x"><span class="pct up">+4.04%</span></td>
+            <td class="col-tp"><span class="text-gray">—</span></td>
+        </tr>
+<tr class="" data-code="008887" data-d="2.8703" data-e="2.0407" data-o="2.8703" data-w="2.0675">
+            <td class="col-cat">半导体</td>
+            <td class="col-code">008887</td>
+            <td class="col-name">华夏国证半导体芯片ETF</td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-36.29%</span></span></td>
+            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+      <svg width="88" height="34" style="display:block;margin:0 auto;">
+        <!-- 背景区域 -->
+        <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
+        <!-- 超卖区(0-30) 浅绿 -->
+        <rect x="4" y="22.2" width="82.0" height="7.8" fill="#e8f5e9" opacity="0.7"/>
+        <!-- 超买区(70-100) 浅红 -->
+        <rect x="4" y="4" width="82.0" height="7.8" fill="#ffebee" opacity="0.7"/>
+        <!-- 参考线 30 -->
+        <line x1="4" y1="22.2" x2="86.0" y2="22.2" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- 参考线 50 -->
+        <line x1="4" y1="17.0" x2="86.0" y2="17.0" stroke="#e0e0e0" stroke-width="0.3"/>
+        <!-- 参考线 70 -->
+        <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- RSI曲线 -->
+        <polyline points="4.0,20.0 6.6,22.5 9.3,19.8 11.9,17.8 14.6,17.4 17.2,12.0 19.9,11.5 22.5,10.9 25.2,9.4 27.8,7.1 30.5,7.2 33.1,8.0 35.7,12.0 38.4,12.1 41.0,12.7 43.7,13.0 46.3,14.3 49.0,13.2 51.6,16.0 54.3,16.5 56.9,17.3 59.5,19.9 62.2,20.7 64.8,23.3 67.5,24.5 70.1,21.3 72.8,20.0 75.4,20.4 78.1,20.4 80.7,20.2 83.4,21.1 86.0,24.7" fill="none" stroke="#27ae60" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <!-- 最后一个点 -->
+        <circle cx="86.0" cy="24.7" r="1.8" fill="#27ae60" stroke="#fff" stroke-width="0.5"/>
+      </svg>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-oversold">超卖</span></div></div></td>
+            <td class="col-val">PE=92.0<br><span class="text-red small">偏高</span></td>
+            <td class="col-action"><span class="action-badge" style="color:#E65100;background:#FFEB9C;">可补仓</span></td>
+            <td class="col-level-combined"><span class="level-badge level-3">倍投3级</span> <span class="mult-val">2倍</span></td>
+            <td class="col-change"><span class="live-change"><span class="pct down">-7.39%</span></span></td>
+            <td class="col-q"><span class="pct down">-36.29%</span></td>
+            <td class="col-shares"><span class="shares-val">36</span></td>
+            <td class="col-price">10</td>
+            <td class="col-final-mult"><span class="guide-mult">72</span></td>
+            <td class="col-amount"><span class="amt-val">¥720</span></td>
+            <td class="col-date">2026-07-20</td>
+            <td class="col-nav">2.0675</td>
+            <td class="col-x"><span class="pct down">-8.69%</span></td>
+            <td class="col-tp"><span class="text-gray">—</span></td>
+        </tr>
+<tr class="" data-code="018344" data-d="1.4532" data-e="1.1239" data-o="1.4532" data-w="1.1254">
+            <td class="col-cat">机器人</td>
+            <td class="col-code">018344</td>
+            <td class="col-name">华夏中证机器人ETF联接A</td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-25.14%</span></span></td>
+            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+      <svg width="88" height="34" style="display:block;margin:0 auto;">
+        <!-- 背景区域 -->
+        <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
+        <!-- 超卖区(0-30) 浅绿 -->
+        <rect x="4" y="22.2" width="82.0" height="7.8" fill="#e8f5e9" opacity="0.7"/>
+        <!-- 超买区(70-100) 浅红 -->
+        <rect x="4" y="4" width="82.0" height="7.8" fill="#ffebee" opacity="0.7"/>
+        <!-- 参考线 30 -->
+        <line x1="4" y1="22.2" x2="86.0" y2="22.2" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- 参考线 50 -->
+        <line x1="4" y1="17.0" x2="86.0" y2="17.0" stroke="#e0e0e0" stroke-width="0.3"/>
+        <!-- 参考线 70 -->
+        <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- RSI曲线 -->
+        <polyline points="4.0,15.6 6.6,15.8 9.3,15.7 11.9,11.8 14.6,12.9 17.2,16.2 19.9,16.0 22.5,16.4 25.2,19.7 27.8,20.2 30.5,18.1 33.1,16.1 35.7,15.5 38.4,12.7 41.0,15.9 43.7,17.3 46.3,19.0 49.0,19.1 51.6,18.6 54.3,19.9 56.9,20.0 59.5,20.0 62.2,19.3 64.8,20.6 67.5,23.6 70.1,21.9 72.8,21.8 75.4,25.0 78.1,24.9 80.7,23.3 83.4,22.9 86.0,24.7" fill="none" stroke="#27ae60" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <!-- 最后一个点 -->
+        <circle cx="86.0" cy="24.7" r="1.8" fill="#27ae60" stroke="#fff" stroke-width="0.5"/>
+      </svg>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-oversold">超卖</span></div></div></td>
+            <td class="col-val">PE=44.9<br><span class="text-red small">偏高</span></td>
+            <td class="col-action"><span class="action-badge" style="color:#E65100;background:#FFEB9C;">可补仓</span></td>
+            <td class="col-level-combined"><span class="level-badge level-2">倍投2级</span> <span class="mult-val">1.5倍</span></td>
+            <td class="col-change"><span class="live-change"><span class="pct down">-2.48%</span></span></td>
+            <td class="col-q"><span class="pct down">-25.14%</span></td>
+            <td class="col-shares"><span class="shares-val">25</span></td>
+            <td class="col-price">10</td>
+            <td class="col-final-mult"><span class="guide-mult">37.5</span></td>
+            <td class="col-amount"><span class="amt-val">¥375</span></td>
+            <td class="col-date">2026-07-24</td>
+            <td class="col-nav">1.1254</td>
+            <td class="col-x"><span class="pct down">-2.61%</span></td>
+            <td class="col-tp"><span class="text-gray">—</span></td>
+        </tr>
+<tr class="" data-code="001790" data-d="3.449" data-e="2.2232" data-o="2.7582" data-w="2.241">
+            <td class="col-cat">智能汽车/无人驾驶</td>
+            <td class="col-code">001790</td>
+            <td class="col-name">国泰智能汽车股票A</td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-39.18%</span></span></td>
+            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+      <svg width="88" height="34" style="display:block;margin:0 auto;">
+        <!-- 背景区域 -->
+        <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
+        <!-- 超卖区(0-30) 浅绿 -->
+        <rect x="4" y="22.2" width="82.0" height="7.8" fill="#e8f5e9" opacity="0.7"/>
+        <!-- 超买区(70-100) 浅红 -->
+        <rect x="4" y="4" width="82.0" height="7.8" fill="#ffebee" opacity="0.7"/>
+        <!-- 参考线 30 -->
+        <line x1="4" y1="22.2" x2="86.0" y2="22.2" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- 参考线 50 -->
+        <line x1="4" y1="17.0" x2="86.0" y2="17.0" stroke="#e0e0e0" stroke-width="0.3"/>
+        <!-- 参考线 70 -->
+        <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- RSI曲线 -->
+        <polyline points="4.0,16.0 6.6,16.0 9.3,14.6 11.9,12.3 14.6,12.9 17.2,16.8 19.9,15.5 22.5,15.9 25.2,16.4 27.8,15.5 30.5,15.2 33.1,13.4 35.7,14.9 38.4,13.3 41.0,15.9 43.7,17.2 46.3,19.7 49.0,19.3 51.6,20.1 54.3,20.4 56.9,20.8 59.5,21.4 62.2,20.8 64.8,21.9 67.5,24.2 70.1,21.9 72.8,21.8 75.4,22.9 78.1,23.1 80.7,21.4 83.4,21.4 86.0,23.1" fill="none" stroke="#27ae60" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <!-- 最后一个点 -->
+        <circle cx="86.0" cy="23.1" r="1.8" fill="#27ae60" stroke="#fff" stroke-width="0.5"/>
+      </svg>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-oversold">超卖</span></div></div></td>
+            <td class="col-val">PE=27.1<br><span class="text-orange small">适中</span></td>
+            <td class="col-action"><span class="action-badge" style="color:#1B5E20;background:#C8E6C9;">强烈补仓</span></td>
+            <td class="col-level-combined"><span class="level-badge level-4">倍投4级</span> <span class="mult-val">3倍</span></td>
+            <td class="col-change"><span class="live-change"><span class="pct down">-3.64%</span></span></td>
+            <td class="col-q"><span class="pct down">-23.04%</span></td>
+            <td class="col-shares"><span class="shares-val">23</span></td>
+            <td class="col-price">10</td>
+            <td class="col-final-mult"><span class="guide-mult">69</span></td>
+            <td class="col-amount"><span class="amt-val">¥690</span></td>
+            <td class="col-date">2026-07-20</td>
+            <td class="col-nav">2.2410</td>
+            <td class="col-x"><span class="pct down">-4.43%</span></td>
+            <td class="col-tp"><span class="text-gray">—</span></td>
+        </tr>
+<tr class="row-watch" data-code="014414" data-d="1.2169" data-e="0.7423" data-o="0.9284" data-w="0.6829">
+            <td class="col-cat">猪肉</td>
+            <td class="col-code">014414</td>
+            <td class="col-name">招商中证畜牧养殖ETF联接A</td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-39.03%</span></span></td>
+            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+      <svg width="88" height="34" style="display:block;margin:0 auto;">
+        <!-- 背景区域 -->
+        <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
+        <!-- 超卖区(0-30) 浅绿 -->
+        <rect x="4" y="22.2" width="82.0" height="7.8" fill="#e8f5e9" opacity="0.7"/>
+        <!-- 超买区(70-100) 浅红 -->
+        <rect x="4" y="4" width="82.0" height="7.8" fill="#ffebee" opacity="0.7"/>
+        <!-- 参考线 30 -->
+        <line x1="4" y1="22.2" x2="86.0" y2="22.2" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- 参考线 50 -->
+        <line x1="4" y1="17.0" x2="86.0" y2="17.0" stroke="#e0e0e0" stroke-width="0.3"/>
+        <!-- 参考线 70 -->
+        <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- RSI曲线 -->
+        <polyline points="4.0,17.2 6.6,18.1 9.3,21.2 11.9,22.2 14.6,21.5 17.2,25.7 19.9,25.9 22.5,25.3 25.2,24.5 27.8,19.9 30.5,20.6 33.1,16.7 35.7,15.9 38.4,16.9 41.0,14.8 43.7,14.7 46.3,15.4 49.0,14.4 51.6,13.9 54.3,13.8 56.9,12.1 59.5,10.8 62.2,10.4 64.8,13.4 67.5,12.1 70.1,15.3 72.8,15.7 75.4,14.9 78.1,19.5 80.7,17.9 83.4,16.1 86.0,15.8" fill="none" stroke="#4a90d9" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <!-- 最后一个点 -->
+        <circle cx="86.0" cy="15.8" r="1.8" fill="#4a90d9" stroke="#fff" stroke-width="0.5"/>
+      </svg>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-neutral">中性</span></div></div></td>
+            <td class="col-val">PE=22.9<br><span class="text-orange small">适中</span></td>
+            <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
+            <td class="col-level-combined"><span class="level-badge level-4">倍投4级</span> <span class="mult-val">3倍</span></td>
+            <td class="col-change"><span class="live-change"><span class="pct down">-0.03%</span></span></td>
+            <td class="col-q"><span class="pct down">-20.08%</span></td>
+            <td class="col-shares"><span class="shares-val">0</span></td>
+            <td class="col-price">10</td>
+            <td class="col-final-mult"><span class="text-gray">0</span></td>
+            <td class="col-amount"><span class="text-gray">¥0</span></td>
+            <td class="col-date">2026-06-25</td>
+            <td class="col-nav">0.6829</td>
+            <td class="col-x"><span class="pct up">+8.67%</span></td>
+            <td class="col-tp"><span class="text-gray">—</span></td>
+        </tr>
+<tr class="" data-code="006098" data-d="1.8708" data-e="1.5254" data-o="1.787" data-w="1.4073">
+            <td class="col-cat">券商</td>
+            <td class="col-code">006098</td>
+            <td class="col-name">华宝券商ETF联接A</td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-19.78%</span></span></td>
+            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+      <svg width="88" height="34" style="display:block;margin:0 auto;">
+        <!-- 背景区域 -->
+        <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
+        <!-- 超卖区(0-30) 浅绿 -->
+        <rect x="4" y="22.2" width="82.0" height="7.8" fill="#e8f5e9" opacity="0.7"/>
+        <!-- 超买区(70-100) 浅红 -->
+        <rect x="4" y="4" width="82.0" height="7.8" fill="#ffebee" opacity="0.7"/>
+        <!-- 参考线 30 -->
+        <line x1="4" y1="22.2" x2="86.0" y2="22.2" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- 参考线 50 -->
+        <line x1="4" y1="17.0" x2="86.0" y2="17.0" stroke="#e0e0e0" stroke-width="0.3"/>
+        <!-- 参考线 70 -->
+        <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- RSI曲线 -->
+        <polyline points="4.0,19.0 6.6,19.7 9.3,18.7 11.9,19.7 14.6,16.0 17.2,12.1 19.9,13.4 22.5,11.5 25.2,13.5 27.8,12.3 30.5,12.3 33.1,11.5 35.7,12.4 38.4,13.1 41.0,13.6 43.7,15.5 46.3,16.0 49.0,14.0 51.6,17.7 54.3,18.3 56.9,17.3 59.5,17.8 62.2,16.7 64.8,18.2 67.5,17.2 70.1,20.0 72.8,18.9 75.4,18.5 78.1,20.1 80.7,18.2 83.4,18.2 86.0,20.7" fill="none" stroke="#4a90d9" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <!-- 最后一个点 -->
+        <circle cx="86.0" cy="20.7" r="1.8" fill="#4a90d9" stroke="#fff" stroke-width="0.5"/>
+      </svg>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-weak">偏弱</span></div></div></td>
+            <td class="col-val">PB=1.3<br><span class="text-orange small">适中</span></td>
+            <td class="col-action"><span class="action-badge" style="color:#7F8C8D;background:#EAEDED;">观望</span></td>
+            <td class="col-level-combined"><span class="level-badge level-1">倍投1级</span> <span class="mult-val">1倍</span></td>
+            <td class="col-change"><span class="live-change"><span class="pct down">-1.32%</span></span></td>
+            <td class="col-q"><span class="pct down">-15.96%</span></td>
+            <td class="col-shares"><span class="shares-val">0</span></td>
+            <td class="col-price">10</td>
+            <td class="col-final-mult"><span class="text-gray">0</span></td>
+            <td class="col-amount"><span class="text-gray">¥0</span></td>
+            <td class="col-date">2026-06-08</td>
+            <td class="col-nav">1.4073</td>
+            <td class="col-x"><span class="pct up">+7.07%</span></td>
+            <td class="col-tp"><span class="text-gray">—</span></td>
+        </tr>
+<tr class="" data-code="011608" data-d="1.6749" data-e="1.3065" data-o="1.6749" data-w="1.3205">
+            <td class="col-cat">科创50</td>
+            <td class="col-code">011608</td>
+            <td class="col-name">易方达科创50联接A</td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-27.98%</span></span></td>
+            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+      <svg width="88" height="34" style="display:block;margin:0 auto;">
+        <!-- 背景区域 -->
+        <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
+        <!-- 超卖区(0-30) 浅绿 -->
+        <rect x="4" y="22.2" width="82.0" height="7.8" fill="#e8f5e9" opacity="0.7"/>
+        <!-- 超买区(70-100) 浅红 -->
+        <rect x="4" y="4" width="82.0" height="7.8" fill="#ffebee" opacity="0.7"/>
+        <!-- 参考线 30 -->
+        <line x1="4" y1="22.2" x2="86.0" y2="22.2" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- 参考线 50 -->
+        <line x1="4" y1="17.0" x2="86.0" y2="17.0" stroke="#e0e0e0" stroke-width="0.3"/>
+        <!-- 参考线 70 -->
+        <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- RSI曲线 -->
+        <polyline points="4.0,20.3 6.6,23.2 9.3,20.4 11.9,18.3 14.6,18.0 17.2,12.0 19.9,11.6 22.5,10.9 25.2,9.8 27.8,6.9 30.5,6.8 33.1,8.2 35.7,12.3 38.4,12.5 41.0,13.1 43.7,13.2 46.3,14.0 49.0,12.8 51.6,15.4 54.3,16.0 56.9,16.7 59.5,18.9 62.2,19.4 64.8,22.2 67.5,23.7 70.1,20.0 72.8,18.7 75.4,19.4 78.1,19.7 80.7,19.4 83.4,20.7 86.0,24.4" fill="none" stroke="#27ae60" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <!-- 最后一个点 -->
+        <circle cx="86.0" cy="24.4" r="1.8" fill="#27ae60" stroke="#fff" stroke-width="0.5"/>
+      </svg>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-oversold">超卖</span></div></div></td>
+            <td class="col-val">PB=8.1<br><span class="text-red small">高估</span></td>
+            <td class="col-action"><span class="action-badge" style="color:#E65100;background:#FFEB9C;">可补仓</span></td>
+            <td class="col-level-combined"><span class="level-badge level-2">倍投2级</span> <span class="mult-val">1.5倍</span></td>
+            <td class="col-change"><span class="live-change"><span class="pct down">-5.98%</span></span></td>
+            <td class="col-q"><span class="pct down">-27.98%</span></td>
+            <td class="col-shares"><span class="shares-val">27</span></td>
+            <td class="col-price">10</td>
+            <td class="col-final-mult"><span class="guide-mult">40.5</span></td>
+            <td class="col-amount"><span class="amt-val">¥405</span></td>
+            <td class="col-date">2026-07-17</td>
+            <td class="col-nav">1.3205</td>
+            <td class="col-x"><span class="pct down">-7.04%</span></td>
+            <td class="col-tp"><span class="text-gray">—</span></td>
+        </tr>
+<tr class="" data-code="003765" data-d="2.3474" data-e="1.8082" data-o="2.3474" data-w="1.859">
+            <td class="col-cat">创业板</td>
+            <td class="col-code">003765</td>
+            <td class="col-name">广发创业板ETF联接A</td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-29.99%</span></span></td>
+            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+      <svg width="88" height="34" style="display:block;margin:0 auto;">
+        <!-- 背景区域 -->
+        <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
+        <!-- 超卖区(0-30) 浅绿 -->
+        <rect x="4" y="22.2" width="82.0" height="7.8" fill="#e8f5e9" opacity="0.7"/>
+        <!-- 超买区(70-100) 浅红 -->
+        <rect x="4" y="4" width="82.0" height="7.8" fill="#ffebee" opacity="0.7"/>
+        <!-- 参考线 30 -->
+        <line x1="4" y1="22.2" x2="86.0" y2="22.2" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- 参考线 50 -->
+        <line x1="4" y1="17.0" x2="86.0" y2="17.0" stroke="#e0e0e0" stroke-width="0.3"/>
+        <!-- 参考线 70 -->
+        <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- RSI曲线 -->
+        <polyline points="4.0,15.5 6.6,16.2 9.3,14.1 11.9,12.2 14.6,12.3 17.2,15.8 19.9,15.9 22.5,14.6 25.2,15.0 27.8,13.3 30.5,13.5 33.1,13.2 35.7,15.3 38.4,15.5 41.0,17.9 43.7,18.9 46.3,20.1 49.0,19.2 51.6,21.5 54.3,21.2 56.9,20.4 59.5,22.1 62.2,21.7 64.8,23.3 67.5,24.6 70.1,21.4 72.8,20.7 75.4,20.6 78.1,20.8 80.7,19.4 83.4,20.6 86.0,23.2" fill="none" stroke="#27ae60" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <!-- 最后一个点 -->
+        <circle cx="86.0" cy="23.2" r="1.8" fill="#27ae60" stroke="#fff" stroke-width="0.5"/>
+      </svg>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-oversold">超卖</span></div></div></td>
+            <td class="col-val">PE=41.7<br><span class="text-orange small">适中</span></td>
+            <td class="col-action"><span class="action-badge" style="color:#E65100;background:#FFEB9C;">可补仓</span></td>
+            <td class="col-level-combined"><span class="level-badge level-2">倍投2级</span> <span class="mult-val">1.5倍</span></td>
+            <td class="col-change"><span class="live-change"><span class="pct down">-7.02%</span></span></td>
+            <td class="col-q"><span class="pct down">-29.99%</span></td>
+            <td class="col-shares"><span class="shares-val">29</span></td>
+            <td class="col-price">10</td>
+            <td class="col-final-mult"><span class="guide-mult">43.5</span></td>
+            <td class="col-amount"><span class="amt-val">¥435</span></td>
+            <td class="col-date">2026-07-17</td>
+            <td class="col-nav">1.8590</td>
+            <td class="col-x"><span class="pct down">-9.75%</span></td>
+            <td class="col-tp"><span class="text-gray">—</span></td>
+        </tr>
+<tr class="" data-code="025656" data-d="1.2999" data-e="1.0022" data-o="1.282" data-w="0.9946">
+            <td class="col-cat">量化中小盘</td>
+            <td class="col-code">025656</td>
+            <td class="col-name">国金智远量化A</td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-27.02%</span></span></td>
+            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+      <svg width="88" height="34" style="display:block;margin:0 auto;">
+        <!-- 背景区域 -->
+        <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
+        <!-- 超卖区(0-30) 浅绿 -->
+        <rect x="4" y="22.2" width="82.0" height="7.8" fill="#e8f5e9" opacity="0.7"/>
+        <!-- 超买区(70-100) 浅红 -->
+        <rect x="4" y="4" width="82.0" height="7.8" fill="#ffebee" opacity="0.7"/>
+        <!-- 参考线 30 -->
+        <line x1="4" y1="22.2" x2="86.0" y2="22.2" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- 参考线 50 -->
+        <line x1="4" y1="17.0" x2="86.0" y2="17.0" stroke="#e0e0e0" stroke-width="0.3"/>
+        <!-- 参考线 70 -->
+        <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- RSI曲线 -->
+        <polyline points="4.0,15.3 6.6,15.8 9.3,14.3 11.9,11.4 14.6,11.5 17.2,14.7 19.9,14.7 22.5,14.4 25.2,15.1 27.8,12.5 30.5,12.7 33.1,11.4 35.7,13.6 38.4,13.8 41.0,16.7 43.7,19.1 46.3,21.2 49.0,19.2 51.6,21.9 54.3,22.8 56.9,21.3 59.5,22.1 62.2,22.0 64.8,23.4 67.5,25.3 70.1,23.0 72.8,22.6 75.4,22.6 78.1,22.7 80.7,21.1 83.4,21.4 86.0,23.3" fill="none" stroke="#27ae60" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <!-- 最后一个点 -->
+        <circle cx="86.0" cy="23.3" r="1.8" fill="#27ae60" stroke="#fff" stroke-width="0.5"/>
+      </svg>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-oversold">超卖</span></div></div></td>
+            <td class="col-val">PE=35.1<br><span class="text-red small">偏高</span></td>
+            <td class="col-action"><span class="action-badge" style="color:#E65100;background:#FFEB9C;">可补仓</span></td>
+            <td class="col-level-combined"><span class="level-badge level-2">倍投2级</span> <span class="mult-val">1.5倍</span></td>
+            <td class="col-change"><span class="live-change"><span class="pct down">-4.12%</span></span></td>
+            <td class="col-q"><span class="pct down">-25.95%</span></td>
+            <td class="col-shares"><span class="shares-val">25</span></td>
+            <td class="col-price">10</td>
+            <td class="col-final-mult"><span class="guide-mult">37.5</span></td>
+            <td class="col-amount"><span class="amt-val">¥375</span></td>
+            <td class="col-date">2026-07-20</td>
+            <td class="col-nav">0.9946</td>
+            <td class="col-x"><span class="pct down">-3.36%</span></td>
+            <td class="col-tp"><span class="text-gray">—</span></td>
+        </tr>
+<tr class="" data-code="025880" data-d="1.9364" data-e="1.2241" data-o="1.9364" data-w="1.3201">
+            <td class="col-cat">CPO</td>
+            <td class="col-code">025880</td>
+            <td class="col-name">汇添富科技领先混合A</td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-48.65%</span></span></td>
+            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+      <svg width="88" height="34" style="display:block;margin:0 auto;">
+        <!-- 背景区域 -->
+        <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
+        <!-- 超卖区(0-30) 浅绿 -->
+        <rect x="4" y="22.2" width="82.0" height="7.8" fill="#e8f5e9" opacity="0.7"/>
+        <!-- 超买区(70-100) 浅红 -->
+        <rect x="4" y="4" width="82.0" height="7.8" fill="#ffebee" opacity="0.7"/>
+        <!-- 参考线 30 -->
+        <line x1="4" y1="22.2" x2="86.0" y2="22.2" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- 参考线 50 -->
+        <line x1="4" y1="17.0" x2="86.0" y2="17.0" stroke="#e0e0e0" stroke-width="0.3"/>
+        <!-- 参考线 70 -->
+        <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- RSI曲线 -->
+        <polyline points="4.0,14.9 6.6,15.2 9.3,13.3 11.9,11.3 14.6,12.1 17.2,12.8 19.9,13.3 22.5,12.6 25.2,13.3 27.8,14.1 30.5,14.2 33.1,14.5 35.7,16.6 38.4,16.2 41.0,18.6 43.7,19.8 46.3,20.8 49.0,20.0 51.6,21.4 54.3,21.3 56.9,20.0 59.5,21.7 62.2,21.1 64.8,21.8 67.5,23.9 70.1,21.2 72.8,20.5 75.4,21.0 78.1,20.6 80.7,19.6 83.4,20.8 86.0,23.4" fill="none" stroke="#27ae60" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <!-- 最后一个点 -->
+        <circle cx="86.0" cy="23.4" r="1.8" fill="#27ae60" stroke="#fff" stroke-width="0.5"/>
+      </svg>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-oversold">超卖</span></div></div></td>
+            <td class="col-val">PE=14.3<br><span class="text-red small">偏高</span></td>
+            <td class="col-action"><span class="action-badge" style="color:#E65100;background:#FFEB9C;">可补仓</span></td>
+            <td class="col-level-combined"><span class="level-badge level-4">倍投4级</span> <span class="mult-val">3倍</span></td>
+            <td class="col-change"><span class="live-change"><span class="pct down">-11.87%</span></span></td>
+            <td class="col-q"><span class="pct down">-48.65%</span></td>
+            <td class="col-shares"><span class="shares-val">48</span></td>
+            <td class="col-price">10</td>
+            <td class="col-final-mult"><span class="guide-mult">144</span></td>
+            <td class="col-amount"><span class="amt-val">¥1,440</span></td>
+            <td class="col-date">2026-07-24</td>
+            <td class="col-nav">1.3201</td>
+            <td class="col-x"><span class="pct down">-19.14%</span></td>
+            <td class="col-tp"><span class="text-gray">—</span></td>
+        </tr>
+<tr class="" data-code="021420" data-d="2.6228" data-e="1.9438" data-o="2.6228" data-w="1.9915">
+            <td class="col-cat">存储芯片</td>
+            <td class="col-code">021420</td>
+            <td class="col-name">广发信创ETF联接A</td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-31.68%</span></span></td>
+            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+      <svg width="88" height="34" style="display:block;margin:0 auto;">
+        <!-- 背景区域 -->
+        <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
+        <!-- 超卖区(0-30) 浅绿 -->
+        <rect x="4" y="22.2" width="82.0" height="7.8" fill="#e8f5e9" opacity="0.7"/>
+        <!-- 超买区(70-100) 浅红 -->
+        <rect x="4" y="4" width="82.0" height="7.8" fill="#ffebee" opacity="0.7"/>
+        <!-- 参考线 30 -->
+        <line x1="4" y1="22.2" x2="86.0" y2="22.2" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- 参考线 50 -->
+        <line x1="4" y1="17.0" x2="86.0" y2="17.0" stroke="#e0e0e0" stroke-width="0.3"/>
+        <!-- 参考线 70 -->
+        <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- RSI曲线 -->
+        <polyline points="4.0,20.3 6.6,23.0 9.3,20.2 11.9,17.7 14.6,17.0 17.2,12.9 19.9,12.2 22.5,11.2 25.2,10.2 27.8,7.7 30.5,7.8 33.1,9.0 35.7,12.6 38.4,12.5 41.0,13.0 43.7,13.9 46.3,14.8 49.0,13.9 51.6,15.9 54.3,16.5 56.9,17.4 59.5,20.2 62.2,20.7 64.8,23.3 67.5,24.3 70.1,21.1 72.8,19.6 75.4,20.4 78.1,21.1 80.7,20.5 83.4,21.7 86.0,25.2" fill="none" stroke="#27ae60" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <!-- 最后一个点 -->
+        <circle cx="86.0" cy="25.2" r="1.8" fill="#27ae60" stroke="#fff" stroke-width="0.5"/>
+      </svg>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-extreme">极度超卖</span></div></div></td>
+            <td class="col-val">PE=52.7<br><span class="text-red small">偏高</span></td>
+            <td class="col-action"><span class="action-badge" style="color:#E65100;background:#FFEB9C;">可补仓</span></td>
+            <td class="col-level-combined"><span class="level-badge level-3">倍投3级</span> <span class="mult-val">2倍</span></td>
+            <td class="col-change"><span class="live-change"><span class="pct down">-5.79%</span></span></td>
+            <td class="col-q"><span class="pct down">-31.68%</span></td>
+            <td class="col-shares"><span class="shares-val">31</span></td>
+            <td class="col-price">10</td>
+            <td class="col-final-mult"><span class="guide-mult">62</span></td>
+            <td class="col-amount"><span class="amt-val">¥620</span></td>
+            <td class="col-date">2026-07-17</td>
+            <td class="col-nav">1.9915</td>
+            <td class="col-x"><span class="pct down">-8.19%</span></td>
+            <td class="col-tp"><span class="text-gray">—</span></td>
+        </tr>
+<tr class="row-watch" data-code="013402" data-d="1.1155" data-e="0.7834" data-o="0.7361" data-w="0.7112">
+            <td class="col-cat">恒生科技</td>
+            <td class="col-code">013402</td>
+            <td class="col-name">华夏恒生科技ETF联接（QDII）A</td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-29.81%</span></span></td>
+            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+      <svg width="88" height="34" style="display:block;margin:0 auto;">
+        <!-- 背景区域 -->
+        <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
+        <!-- 超卖区(0-30) 浅绿 -->
+        <rect x="4" y="22.2" width="82.0" height="7.8" fill="#e8f5e9" opacity="0.7"/>
+        <!-- 超买区(70-100) 浅红 -->
+        <rect x="4" y="4" width="82.0" height="7.8" fill="#ffebee" opacity="0.7"/>
+        <!-- 参考线 30 -->
+        <line x1="4" y1="22.2" x2="86.0" y2="22.2" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- 参考线 50 -->
+        <line x1="4" y1="17.0" x2="86.0" y2="17.0" stroke="#e0e0e0" stroke-width="0.3"/>
+        <!-- 参考线 70 -->
+        <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- RSI曲线 -->
+        <polyline points="4.0,16.6 6.6,17.6 9.3,17.4 11.9,17.5 14.6,18.1 17.2,26.9 19.9,24.5 22.5,24.4 25.2,24.8 27.8,21.5 30.5,20.5 33.1,20.1 35.7,19.7 38.4,19.8 41.0,20.0 43.7,19.2 46.3,16.4 49.0,15.6 51.6,15.0 54.3,13.4 56.9,14.2 59.5,12.3 62.2,7.9 64.8,13.8 67.5,13.3 70.1,12.6 72.8,14.6 75.4,14.7 78.1,16.0 80.7,14.9 83.4,17.1 86.0,17.2" fill="none" stroke="#4a90d9" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <!-- 最后一个点 -->
+        <circle cx="86.0" cy="17.2" r="1.8" fill="#4a90d9" stroke="#fff" stroke-width="0.5"/>
+      </svg>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-neutral">中性</span></div></div></td>
+            <td class="col-val">PE=22.7<br><span class="text-orange small">适中</span></td>
+            <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
+            <td class="col-level-combined"><span class="level-badge level-3">倍投3级</span> <span class="mult-val">2倍</span></td>
+            <td class="col-change"><span class="live-change"><span class="pct down">-0.04%</span></span></td>
+            <td class="col-q"><span class="pct up">+6.39%</span></td>
+            <td class="col-shares"><span class="shares-val">0</span></td>
+            <td class="col-price">10</td>
+            <td class="col-final-mult"><span class="text-gray">0</span></td>
+            <td class="col-amount"><span class="text-gray">¥0</span></td>
+            <td class="col-date">2026-06-26</td>
+            <td class="col-nav">0.7112</td>
+            <td class="col-x"><span class="pct up">+10.11%</span></td>
+            <td class="col-tp"><span class="text-gray">—</span></td>
+        </tr>
+<tr class="" data-code="161725" data-d="1.6466" data-e="0.5573" data-o="1.6466" data-w="0.4959">
+            <td class="col-cat">白酒</td>
+            <td class="col-code">161725</td>
+            <td class="col-name">招商中证白酒A</td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-63.58%</span></span></td>
+            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+      <svg width="88" height="34" style="display:block;margin:0 auto;">
+        <!-- 背景区域 -->
+        <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
+        <!-- 超卖区(0-30) 浅绿 -->
+        <rect x="4" y="22.2" width="82.0" height="7.8" fill="#e8f5e9" opacity="0.7"/>
+        <!-- 超买区(70-100) 浅红 -->
+        <rect x="4" y="4" width="82.0" height="7.8" fill="#ffebee" opacity="0.7"/>
+        <!-- 参考线 30 -->
+        <line x1="4" y1="22.2" x2="86.0" y2="22.2" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- 参考线 50 -->
+        <line x1="4" y1="17.0" x2="86.0" y2="17.0" stroke="#e0e0e0" stroke-width="0.3"/>
+        <!-- 参考线 70 -->
+        <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <!-- RSI曲线 -->
+        <polyline points="4.0,12.9 6.6,13.0 9.3,14.7 11.9,15.5 14.6,15.3 17.2,25.9 19.9,26.1 22.5,23.1 25.2,24.0 27.8,21.8 30.5,21.4 33.1,21.3 35.7,21.7 38.4,21.8 41.0,20.8 43.7,21.3 46.3,21.1 49.0,20.7 51.6,18.9 54.3,18.2 56.9,16.4 59.5,14.6 62.2,12.1 64.8,14.4 67.5,12.1 70.1,13.6 72.8,12.6 75.4,13.6 78.1,15.1 80.7,13.3 83.4,12.4 86.0,10.9" fill="none" stroke="#e74c3c" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <!-- 最后一个点 -->
+        <circle cx="86.0" cy="10.9" r="1.8" fill="#e74c3c" stroke="#fff" stroke-width="0.5"/>
+      </svg>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-overbought">超买</span></div></div></td>
+            <td class="col-val">PE=19.7<br><span class="text-orange small">适中</span></td>
+            <td class="col-action"><span class="action-badge" style="color:#E65100;background:#FFEB9C;">可补仓</span></td>
+            <td class="col-level-combined"><span class="level-badge level-extreme-3">极限3级</span> <span class="mult-val">7倍</span></td>
+            <td class="col-change"><span class="live-change"><span class="pct up">+2.57%</span></span></td>
+            <td class="col-q"><span class="pct down">-63.58%</span></td>
+            <td class="col-shares"><span class="shares-val">63</span></td>
+            <td class="col-price">10</td>
+            <td class="col-final-mult"><span class="guide-mult">441</span></td>
+            <td class="col-amount"><span class="amt-val">¥4,410</span></td>
+            <td class="col-date">2026-07-09</td>
+            <td class="col-nav">0.4959</td>
+            <td class="col-x"><span class="pct up">+14.95%</span></td>
+            <td class="col-tp"><span class="text-gray">—</span></td>
+        </tr>
+</tbody>
+</table>
+</div>
+
+<div class="footer">
+  <strong>使用说明：</strong><br>
+  ① 数据均来自 Excel 实际值（非估算）。F=当日涨跌 Q=近期总涨跌幅 R=补仓份数 S=单价 T=补仓倍数 U=补仓金额。<br>
+  ② V/W/X/Y列显示底谷日期/净值/上涨幅度/止盈建议。<br>
+  ③ 涨跌幅颜色遵循A股惯例：<span style="color:#e74c3c;font-weight:bold;">红色=涨</span>，<span style="color:#27ae60;font-weight:bold;">绿色=跌</span>。<br>
+  ④ 浅黄色背景行 = 操作建议为"关注"的基金。<br>
+  ⑤ 系统仅提供数据参谋，投资决策由投资者自行做出。
+</div>
+
+</div>
+</body>
+</html>

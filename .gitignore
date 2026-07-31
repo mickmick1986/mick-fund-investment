@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.DS_Store
+*.swp
+*.swo
+*.log
+_jq_temp_*.txt
+_jq_temp_*.json
+node_modules/
+take_profit_state.json
+# 不将本地浏览器、编辑器或自动化运行状态提交到远程
+.agent-browser/
+.workbuddy/
