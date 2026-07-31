@@ -205,11 +205,90 @@ tbody td:last-child { border-right: none; }
 }
 .footer strong { color: #444; }
 
-@media (max-width: 768px) {
-  body { padding: 8px; }
-  .top-bar { flex-direction: column; align-items: flex-start; }
+/* ===== 手机横屏增强：保留完整表格的一览式框架 ===== */
+.mobile-orientation-bar {
+  display: none;
+  background: #173a62;
+  color: #fff;
+  padding: 9px 12px;
+  border-radius: 10px 10px 0 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.12);
 }
-.live-est {
+.orientation-copy { min-width: 0; }
+.orientation-title { font-size: 13px; font-weight: 700; }
+.orientation-hint { font-size: 10px; opacity: .84; margin-top: 1px; }
+.orientation-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.orientation-btn {
+  appearance: none; border: 1px solid rgba(255,255,255,.42); background: #fff;
+  color: #173a62; border-radius: 7px; padding: 7px 9px; font-weight: 700;
+  font-size: 12px; white-space: nowrap; cursor: pointer;
+}
+.orientation-btn.secondary { background: transparent; color: #fff; display: none; }
+.rotate-tip {
+  display: none; margin: 0; padding: 8px 12px; background: #fff6df;
+  color: #795700; border: 1px solid #f1d890; border-top: 0; font-size: 11px;
+}
+body.preview-landscape .orientation-btn.secondary { display: inline-block; }
+body.preview-landscape .top-bar { border-radius: 0; }
+/* 以高度识别横屏手机，避免横屏后 CSS 宽度超过 768px 而误回桌面样式。 */
+@media (max-width: 768px), (max-height: 500px) and (orientation: landscape) {
+  body { padding: 6px; }
+  .container { max-width: none; }
+  .mobile-orientation-bar { display: flex; }
+  .top-bar { padding: 9px 12px; gap: 4px; flex-direction: column; align-items: flex-start; }
+  .top-bar .main-title { font-size: 15px; letter-spacing: .3px; }
+  .top-bar .stats { display: block; margin-top: 3px; font-size: 12px; }
+  .market-bar { padding: 7px 10px; gap: 8px 13px; max-height: 76px; overflow: hidden; }
+  .market-bar .m-label { font-size: 11px; }
+  .market-bar .m-val { font-size: 11px; }
+  .footer { margin-top: 8px; padding: 8px 10px; font-size: 10px; }
+  .table-wrap { border-radius: 0 0 8px 8px; -webkit-overflow-scrolling: touch; }
+}
+@media ((max-width: 768px) and (orientation: landscape)), ((max-height: 500px) and (orientation: landscape)) {
+  body { padding: 4px; font-size: 11px; }
+  .mobile-orientation-bar { padding: 5px 9px; border-radius: 7px 7px 0 0; }
+  .orientation-title { font-size: 11px; }
+  .orientation-hint { display: none; }
+  .orientation-btn { font-size: 10px; padding: 4px 7px; }
+  .top-bar { padding: 6px 10px; min-height: 34px; flex-direction: row; align-items: center; }
+  .top-bar .main-title { font-size: 13px; }
+  .top-bar .stats { display: inline; margin-left: 6px; font-size: 10px; }
+  .top-bar > div:last-child { font-size: 9px !important; }
+  .market-bar { padding: 5px 8px; gap: 4px 11px; max-height: 48px; overflow: auto; }
+  .market-bar .m-label, .market-bar .m-val { font-size: 10px; }
+  .table-wrap { max-height: calc(100vh - 98px); overflow: auto; isolation: isolate; }
+  table { min-width: 1350px; font-size: 10.5px; border-collapse: separate; border-spacing: 0; }
+  .region-row th { padding: 4px 3px; font-size: 11px; height: 26px; }
+  .header-row th { padding: 5px 3px; font-size: 10px; height: 30px; }
+  tbody td { padding: 4px 3px; font-size: 10px; }
+  .col-cat { min-width: 58px; font-size: 10px; }
+  .col-code { min-width: 53px; font-size: 10px; }
+  .col-name { min-width: 130px; font-size: 11px; padding-left: 5px; }
+  .col-rsi { min-width: 116px; }
+  .col-val { min-width: 80px; font-size: 10px; }
+  .col-action { min-width: 76px; }
+  .col-level-combined { min-width: 94px; }
+  .rsi-badge, .level-badge, .action-badge { font-size: 9.5px; padding: 2px 5px; }
+  .guide-mult, .amt-val, .pct, .pct.up, .pct.down { font-size: 11px; }
+  /* 两级标题固定在表格滚动区顶部，避免数据行穿透覆盖。 */
+  thead { position: relative; z-index: 40; }
+  thead .region-row th { position: sticky; top: 0; z-index: 42; background-clip: padding-box; box-shadow: 0 1px 0 rgba(255,255,255,.2); }
+  thead .header-row th { position: sticky; top: 26px; z-index: 41; background: #2c3e50; background-clip: padding-box; box-shadow: 0 2px 3px rgba(0,0,0,.22); }
+  /* 横向滚动时固定基金上下文。 */
+  thead .header-row th:nth-child(1), tbody td:nth-child(1) { position: sticky; left: 0; z-index: 20; }
+  thead .header-row th:nth-child(2), tbody td:nth-child(2) { position: sticky; left: 58px; z-index: 20; }
+  thead .header-row th:nth-child(3), tbody td:nth-child(3) { position: sticky; left: 111px; z-index: 20; box-shadow: 3px 0 5px rgba(0,0,0,.13); }
+  .region-row th.region-info { position: sticky; left: 0; z-index: 45; }
+  thead .header-row th:nth-child(-n+3) { background: #556572; z-index: 46; }
+  thead .region-row th.region-info { z-index: 47; }
+  tbody td:nth-child(1), tbody td:nth-child(2), tbody td:nth-child(3) { background: #E8EDF2; }
+  tbody tr.row-watch td:nth-child(1), tbody tr.row-watch td:nth-child(2), tbody tr.row-watch td:nth-child(3) { background: #FFFBEA; }
+  .footer { display: none; }
+}
+.live-est { 
   color: #E67E22 !important;
   font-size: 12px;
 }
@@ -234,6 +313,7 @@ tbody td:last-child { border-right: none; }
 }
 </style>
 <script>
+var FINAL_NAV_MODE = false;
 // ========== 路线B 实时数据引擎 v2.0 ==========
 // 功能：盘中从天天基金API实时拉取净值 → 重算G/Q/R/S/T/U/U总计 → 更新页面
 // 时段：9:30-11:30/13:00-14:29 每5分钟 | 14:30-15:00 每30秒 | 盘后60秒整页刷新
@@ -429,6 +509,8 @@ function isTradingDay() {
 }
 
 function getRefreshMode() {
+  // 晚间确认净值版本为结算快照，不再用盘中估值覆盖最终结果。
+  if (FINAL_NAV_MODE) return 'off';
   if (!isTradingDay()) return 'off';
   var now = new Date();
   var h = now.getHours();
@@ -482,6 +564,11 @@ function mainLoop() {
     setTimeout(mainLoop, SLOW_INTERVAL);
     countdown = COUNTDOWN_START;
   } else {
+    if (FINAL_NAV_MODE) {
+      if (statusEl) { statusEl.textContent = '✓确认净值'; statusEl.style.color = '#27AE60'; }
+      if (timerEl && timerEl.parentNode) timerEl.parentNode.style.display = 'none';
+      return;
+    }
     if (statusEl) { statusEl.textContent = '⏳盘后'; statusEl.style.color = '#7f8c8d'; }
     // 恢复所有行静态数据
     funds.forEach(function(fd) { resetCell(fd); });
@@ -502,12 +589,23 @@ setTimeout(mainLoop, 1000);
 </head>
 <body>
 <div class="container">
+<div class="mobile-orientation-bar" id="orientation-bar">
+  <div class="orientation-copy">
+    <div class="orientation-title">完整表格横屏查看</div>
+    <div class="orientation-hint" id="orientation-hint">横屏后可同时查看更多列，左侧基金信息会固定。</div>
+  </div>
+  <div class="orientation-actions">
+    <button class="orientation-btn" id="landscape-toggle" type="button">↻ 横屏查看</button>
+    <button class="orientation-btn secondary" id="portrait-toggle" type="button">返回竖屏</button>
+  </div>
+</div>
+<p class="rotate-tip" id="rotate-tip">请将手机旋转为横屏；此浏览器不支持自动锁定方向，但横屏后仍会启用紧凑表格和固定基金信息列。</p>
 
 <div class="top-bar">
   <div>
     <span class="main-title">【2026-07-31补仓指导】</span>
     <span style="font-size:11px;opacity:0.7;margin-left:12px;"><span id="live-status" style="margin-right:8px;">⏳盘后</span>⏱ <span id="refresh-timer">60</span>秒后刷新</span>
-    <span class="stats">25只基金 -- 需补仓<span class="highlight">6</span>只 -- 共<span class="highlight">123</span>份 -- ¥<span class="highlight">5,790</span></span>
+    <span class="stats">25只基金 -- 需补仓<span class="highlight">6</span>只 -- 共<span class="highlight">133</span>份 -- ¥<span class="highlight">6,170</span></span>
   </div>
   <div style="font-size:12px;opacity:0.85;">数据更新: 2026-07-31 20:44:37</div>
 </div>
@@ -580,7 +678,7 @@ setTimeout(mainLoop, 1000);
             <td class="col-cat">黄金</td>
             <td class="col-code">000218</td>
             <td class="col-name">国泰黄金ETF联接A</td>
-            <td class="col-dd down"><span class="live-dd"><span class="pct down">-27.85%</span></span></td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-28.52%</span></span></td>
             <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
@@ -605,21 +703,21 @@ setTimeout(mainLoop, 1000);
             <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
             <td class="col-level-combined"><span class="level-badge level-3">倍投3级</span> <span class="mult-val">2倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct up">+0.67%</span></span></td>
-            <td class="col-q"><span class="live-q"><span class="pct down">-16.00%</span></span></td>
+            <td class="col-q"><span class="live-q"><span class="pct down">-16.67%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
             <td class="col-price">10</td>
             <td class="col-final-mult"><span class="live-mult"><span class="text-gray">0</span></span></td>
             <td class="col-amount"><span class="live-amount"><span class="text-gray">¥0</span></span></td>
             <td class="col-date">2026-07-01</td>
             <td class="col-nav">3.1391</td>
-            <td class="col-x"><span class="live-x"><span class="pct up">+2.49%</span></span></td>
+            <td class="col-x"><span class="live-x"><span class="pct up">+1.82%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
 <tr class="" data-code="024194" data-d="1.9691" data-e="1.1865" data-o="1.1902" data-w="1.1804" data-action="可补仓" data-n="3" data-s="10" data-level="倍投4级">
             <td class="col-cat">商业航天</td>
             <td class="col-code">024194</td>
             <td class="col-name">永赢国证商用卫星通信产业ETF联接A</td>
-            <td class="col-dd down"><span class="live-dd"><span class="pct down">-36.13%</span></span></td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-39.74%</span></span></td>
             <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
@@ -644,21 +742,21 @@ setTimeout(mainLoop, 1000);
             <td class="col-action"><span class="action-badge" style="color:#E65100;background:#FFEB9C;">可补仓</span></td>
             <td class="col-level-combined"><span class="level-badge level-4">倍投4级</span> <span class="mult-val">3倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct up">+3.61%</span></span></td>
-            <td class="col-q"><span class="live-q"><span class="pct up">+3.30%</span></span></td>
+            <td class="col-q"><span class="live-q"><span class="pct down">-0.31%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">1</span></span></td>
             <td class="col-price">10</td>
             <td class="col-final-mult"><span class="live-mult"><span class="guide-mult">3</span></span></td>
             <td class="col-amount"><span class="live-amount"><span class="amt-val">¥30</span></span></td>
             <td class="col-date">2026-07-20</td>
             <td class="col-nav">1.1804</td>
-            <td class="col-x"><span class="live-x"><span class="pct up">+4.13%</span></span></td>
+            <td class="col-x"><span class="live-x"><span class="pct up">+0.52%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
 <tr class="row-watch" data-code="024202" data-d="1.8609" data-e="1.2555" data-o="1.2664" data-w="1.2472" data-action="关注" data-n="2" data-s="10" data-level="倍投3级">
             <td class="col-cat">超导/核聚变</td>
             <td class="col-code">024202</td>
             <td class="col-name">永赢制造升级智选混合A</td>
-            <td class="col-dd down"><span class="live-dd"><span class="pct down">-30.87%</span></span></td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-32.53%</span></span></td>
             <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
@@ -683,21 +781,21 @@ setTimeout(mainLoop, 1000);
             <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
             <td class="col-level-combined"><span class="level-badge level-3">倍投3级</span> <span class="mult-val">2倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct up">+1.66%</span></span></td>
-            <td class="col-q"><span class="live-q"><span class="pct up">+0.80%</span></span></td>
+            <td class="col-q"><span class="live-q"><span class="pct down">-0.86%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
             <td class="col-price">10</td>
             <td class="col-final-mult"><span class="live-mult"><span class="text-gray">0</span></span></td>
             <td class="col-amount"><span class="live-amount"><span class="text-gray">¥0</span></span></td>
             <td class="col-date">2026-07-20</td>
             <td class="col-nav">1.2472</td>
-            <td class="col-x"><span class="live-x"><span class="pct up">+2.33%</span></span></td>
+            <td class="col-x"><span class="live-x"><span class="pct up">+0.67%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
 <tr class="" data-code="001475" data-d="2.378" data-e="2.002" data-o="2.378" data-w="1.955" data-action="观望" data-n="1" data-s="10" data-level="倍投1级">
             <td class="col-cat">军工</td>
             <td class="col-code">001475</td>
             <td class="col-name">易方达国防军工混合A</td>
-            <td class="col-dd down"><span class="live-dd"><span class="pct down">-13.39%</span></span></td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-15.81%</span></span></td>
             <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
@@ -722,21 +820,21 @@ setTimeout(mainLoop, 1000);
             <td class="col-action"><span class="action-badge" style="color:#7F8C8D;background:#EAEDED;">观望</span></td>
             <td class="col-level-combined"><span class="level-badge level-1">倍投1级</span> <span class="mult-val">1倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct up">+2.42%</span></span></td>
-            <td class="col-q"><span class="live-q"><span class="pct down">-13.39%</span></span></td>
+            <td class="col-q"><span class="live-q"><span class="pct down">-15.81%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
             <td class="col-price">10</td>
             <td class="col-final-mult"><span class="live-mult"><span class="text-gray">0</span></span></td>
             <td class="col-amount"><span class="live-amount"><span class="text-gray">¥0</span></span></td>
             <td class="col-date">2026-07-20</td>
             <td class="col-nav">1.9550</td>
-            <td class="col-x"><span class="live-x"><span class="pct up">+4.82%</span></span></td>
+            <td class="col-x"><span class="live-x"><span class="pct up">+2.40%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
 <tr class="row-watch" data-code="013477" data-d="1.3333" data-e="0.8514" data-o="0.8226" data-w="0.7707" data-action="关注" data-n="3" data-s="10" data-level="倍投4级">
             <td class="col-cat">互金/金融IT</td>
             <td class="col-code">013477</td>
             <td class="col-name">华宝中证金融科技主题ETF联接A</td>
-            <td class="col-dd down"><span class="live-dd"><span class="pct down">-32.61%</span></span></td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-36.14%</span></span></td>
             <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
@@ -761,21 +859,21 @@ setTimeout(mainLoop, 1000);
             <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
             <td class="col-level-combined"><span class="level-badge level-4">倍投4级</span> <span class="mult-val">3倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct up">+3.53%</span></span></td>
-            <td class="col-q"><span class="live-q"><span class="pct up">+7.03%</span></span></td>
+            <td class="col-q"><span class="live-q"><span class="pct up">+3.50%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
             <td class="col-price">10</td>
             <td class="col-final-mult"><span class="live-mult"><span class="text-gray">0</span></span></td>
             <td class="col-amount"><span class="live-amount"><span class="text-gray">¥0</span></span></td>
             <td class="col-date">2026-07-24</td>
             <td class="col-nav">0.7707</td>
-            <td class="col-x"><span class="live-x"><span class="pct up">+14.00%</span></span></td>
+            <td class="col-x"><span class="live-x"><span class="pct up">+10.47%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
 <tr class="" data-code="005453" data-d="3.4821" data-e="1.1263" data-o="1.2217" data-w="0.9073" data-action="可补仓" data-n="7" data-s="10" data-level="极限3级">
             <td class="col-cat">A股+港股(医药均衡)</td>
             <td class="col-code">005453</td>
             <td class="col-name">前海开源医疗健康混合A</td>
-            <td class="col-dd down"><span class="live-dd"><span class="pct down">-65.76%</span></span></td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-67.65%</span></span></td>
             <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
@@ -800,21 +898,21 @@ setTimeout(mainLoop, 1000);
             <td class="col-action"><span class="action-badge" style="color:#E65100;background:#FFEB9C;">可补仓</span></td>
             <td class="col-level-combined"><span class="level-badge level-extreme-3">极限3级</span> <span class="mult-val">7倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct up">+1.89%</span></span></td>
-            <td class="col-q"><span class="live-q"><span class="pct down">-5.92%</span></span></td>
-            <td class="col-shares"><span class="live-shares"><span class="shares-val">5</span></span></td>
+            <td class="col-q"><span class="live-q"><span class="pct down">-7.81%</span></span></td>
+            <td class="col-shares"><span class="live-shares"><span class="shares-val">7</span></span></td>
             <td class="col-price">10</td>
-            <td class="col-final-mult"><span class="live-mult"><span class="guide-mult">35</span></span></td>
-            <td class="col-amount"><span class="live-amount"><span class="amt-val">¥350</span></span></td>
+            <td class="col-final-mult"><span class="live-mult"><span class="guide-mult">49</span></span></td>
+            <td class="col-amount"><span class="live-amount"><span class="amt-val">¥490</span></span></td>
             <td class="col-date">2026-06-09</td>
             <td class="col-nav">0.9073</td>
-            <td class="col-x"><span class="live-x"><span class="pct up">+26.03%</span></span></td>
+            <td class="col-x"><span class="live-x"><span class="pct up">+24.14%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
 <tr class="row-watch" data-code="008928" data-d="1.9384" data-e="1.3905" data-o="1.3443" data-w="1.2482" data-action="关注" data-n="2" data-s="10" data-level="倍投3级">
             <td class="col-cat">消费</td>
             <td class="col-code">008928</td>
             <td class="col-name">泰达宏利中证主要消费红利指数A</td>
-            <td class="col-dd down"><span class="live-dd"><span class="pct down">-28.10%</span></span></td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-28.27%</span></span></td>
             <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
@@ -839,21 +937,21 @@ setTimeout(mainLoop, 1000);
             <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
             <td class="col-level-combined"><span class="level-badge level-3">倍投3级</span> <span class="mult-val">2倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct up">+0.17%</span></span></td>
-            <td class="col-q"><span class="live-q"><span class="pct up">+3.61%</span></span></td>
+            <td class="col-q"><span class="live-q"><span class="pct up">+3.44%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
             <td class="col-price">10</td>
             <td class="col-final-mult"><span class="live-mult"><span class="text-gray">0</span></span></td>
             <td class="col-amount"><span class="live-amount"><span class="text-gray">¥0</span></span></td>
             <td class="col-date">2026-06-26</td>
             <td class="col-nav">1.2482</td>
-            <td class="col-x"><span class="live-x"><span class="pct up">+11.57%</span></span></td>
+            <td class="col-x"><span class="live-x"><span class="pct up">+11.40%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
 <tr class="" data-code="003095" data-d="4.31" data-e="1.8994" data-o="2.1116" data-w="1.4955" data-action="建议补仓" data-n="6" data-s="10" data-level="极限2级">
             <td class="col-cat">CXO+创新药</td>
             <td class="col-code">003095</td>
             <td class="col-name">中欧医疗健康混合A</td>
-            <td class="col-dd down"><span class="live-dd"><span class="pct down">-54.74%</span></span></td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-55.93%</span></span></td>
             <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
@@ -878,21 +976,21 @@ setTimeout(mainLoop, 1000);
             <td class="col-action"><span class="action-badge" style="color:#2E7D32;background:#C8E6C9;">建议补仓</span></td>
             <td class="col-level-combined"><span class="level-badge level-extreme-2">极限2级</span> <span class="mult-val">6倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct up">+1.19%</span></span></td>
-            <td class="col-q"><span class="live-q"><span class="pct down">-8.86%</span></span></td>
-            <td class="col-shares"><span class="live-shares"><span class="shares-val">8</span></span></td>
+            <td class="col-q"><span class="live-q"><span class="pct down">-10.05%</span></span></td>
+            <td class="col-shares"><span class="live-shares"><span class="shares-val">10</span></span></td>
             <td class="col-price">10</td>
-            <td class="col-final-mult"><span class="live-mult"><span class="guide-mult">48</span></span></td>
-            <td class="col-amount"><span class="live-amount"><span class="amt-val">¥480</span></span></td>
+            <td class="col-final-mult"><span class="live-mult"><span class="guide-mult">60</span></span></td>
+            <td class="col-amount"><span class="live-amount"><span class="amt-val">¥600</span></span></td>
             <td class="col-date">2026-06-08</td>
             <td class="col-nav">1.4955</td>
-            <td class="col-x"><span class="live-x"><span class="pct up">+28.20%</span></span></td>
+            <td class="col-x"><span class="live-x"><span class="pct up">+27.01%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
 <tr class="row-watch" data-code="011102" data-d="1.5245" data-e="0.7017" data-o="0.7234" data-w="0.6782" data-action="关注" data-n="5" data-s="10" data-level="极限1级">
             <td class="col-cat">光伏</td>
             <td class="col-code">011102</td>
             <td class="col-name">天弘中证光伏产业指数A</td>
-            <td class="col-dd down"><span class="live-dd"><span class="pct down">-52.39%</span></span></td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-53.97%</span></span></td>
             <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
@@ -917,21 +1015,21 @@ setTimeout(mainLoop, 1000);
             <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
             <td class="col-level-combined"><span class="level-badge level-extreme-1">极限1级</span> <span class="mult-val">5倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct up">+1.58%</span></span></td>
-            <td class="col-q"><span class="live-q"><span class="pct down">-1.42%</span></span></td>
+            <td class="col-q"><span class="live-q"><span class="pct down">-3.00%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
             <td class="col-price">10</td>
             <td class="col-final-mult"><span class="live-mult"><span class="text-gray">0</span></span></td>
             <td class="col-amount"><span class="live-amount"><span class="text-gray">¥0</span></span></td>
             <td class="col-date">2026-07-20</td>
             <td class="col-nav">0.6782</td>
-            <td class="col-x"><span class="live-x"><span class="pct up">+5.05%</span></span></td>
+            <td class="col-x"><span class="live-x"><span class="pct up">+3.47%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
 <tr class="row-watch" data-code="003984" data-d="3.8813" data-e="2.361" data-o="2.3907" data-w="2.2003" data-action="关注" data-n="3" data-s="10" data-level="倍投4级">
             <td class="col-cat">锂电</td>
             <td class="col-code">003984</td>
             <td class="col-name">嘉实新能源新材料股票A</td>
-            <td class="col-dd down"><span class="live-dd"><span class="pct down">-39.57%</span></span></td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-39.17%</span></span></td>
             <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
@@ -956,21 +1054,21 @@ setTimeout(mainLoop, 1000);
             <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
             <td class="col-level-combined"><span class="level-badge level-4">倍投4级</span> <span class="mult-val">3倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct down">-0.40%</span></span></td>
-            <td class="col-q"><span class="live-q"><span class="pct down">-1.64%</span></span></td>
+            <td class="col-q"><span class="live-q"><span class="pct down">-1.24%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
             <td class="col-price">10</td>
             <td class="col-final-mult"><span class="live-mult"><span class="text-gray">0</span></span></td>
             <td class="col-amount"><span class="live-amount"><span class="text-gray">¥0</span></span></td>
             <td class="col-date">2026-07-20</td>
             <td class="col-nav">2.2003</td>
-            <td class="col-x"><span class="live-x"><span class="pct up">+6.90%</span></span></td>
+            <td class="col-x"><span class="live-x"><span class="pct up">+7.30%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
 <tr class="row-watch" data-code="010769" data-d="1.1129" data-e="0.7404" data-o="0.7339" data-w="0.6665" data-action="关注" data-n="3" data-s="10" data-level="倍投4级">
             <td class="col-cat">农业(种植养殖)</td>
             <td class="col-code">010769</td>
             <td class="col-name">天弘中证农业主题ETF联接A</td>
-            <td class="col-dd down"><span class="live-dd"><span class="pct down">-33.59%</span></span></td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-33.47%</span></span></td>
             <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
@@ -995,21 +1093,21 @@ setTimeout(mainLoop, 1000);
             <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
             <td class="col-level-combined"><span class="level-badge level-4">倍投4级</span> <span class="mult-val">3倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct down">-0.12%</span></span></td>
-            <td class="col-q"><span class="live-q"><span class="pct up">+0.77%</span></span></td>
+            <td class="col-q"><span class="live-q"><span class="pct up">+0.89%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
             <td class="col-price">10</td>
             <td class="col-final-mult"><span class="live-mult"><span class="text-gray">0</span></span></td>
             <td class="col-amount"><span class="live-amount"><span class="text-gray">¥0</span></span></td>
             <td class="col-date">2026-06-26</td>
             <td class="col-nav">0.6665</td>
-            <td class="col-x"><span class="live-x"><span class="pct up">+10.97%</span></span></td>
+            <td class="col-x"><span class="live-x"><span class="pct up">+11.09%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
 <tr class="row-watch" data-code="025832" data-d="1.5577" data-e="1.1133" data-o="1.1076" data-w="1.0944" data-action="关注" data-n="2" data-s="10" data-level="倍投3级">
             <td class="col-cat">电力设备</td>
             <td class="col-code">025832</td>
             <td class="col-name">天弘中证电网设备主题指数A</td>
-            <td class="col-dd down"><span class="live-dd"><span class="pct down">-26.96%</span></span></td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-28.53%</span></span></td>
             <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
@@ -1034,21 +1132,21 @@ setTimeout(mainLoop, 1000);
             <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
             <td class="col-level-combined"><span class="level-badge level-3">倍投3级</span> <span class="mult-val">2倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct up">+1.57%</span></span></td>
-            <td class="col-q"><span class="live-q"><span class="pct up">+2.08%</span></span></td>
+            <td class="col-q"><span class="live-q"><span class="pct up">+0.51%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
             <td class="col-price">10</td>
             <td class="col-final-mult"><span class="live-mult"><span class="text-gray">0</span></span></td>
             <td class="col-amount"><span class="live-amount"><span class="text-gray">¥0</span></span></td>
             <td class="col-date">2026-07-20</td>
             <td class="col-nav">1.0944</td>
-            <td class="col-x"><span class="live-x"><span class="pct up">+3.30%</span></span></td>
+            <td class="col-x"><span class="live-x"><span class="pct up">+1.73%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
 <tr class="row-watch" data-code="004432" data-d="2.5089" data-e="1.7764" data-o="1.6299" data-w="1.6299" data-action="关注" data-n="2" data-s="10" data-level="倍投3级">
             <td class="col-cat">有色金属</td>
             <td class="col-code">004432</td>
             <td class="col-name">南方有色金属ETF联接A</td>
-            <td class="col-dd down"><span class="live-dd"><span class="pct down">-27.20%</span></span></td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-29.20%</span></span></td>
             <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
@@ -1073,21 +1171,21 @@ setTimeout(mainLoop, 1000);
             <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
             <td class="col-level-combined"><span class="level-badge level-3">倍投3级</span> <span class="mult-val">2倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct up">+2.00%</span></span></td>
-            <td class="col-q"><span class="live-q"><span class="pct up">+10.99%</span></span></td>
+            <td class="col-q"><span class="live-q"><span class="pct up">+8.99%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
             <td class="col-price">10</td>
             <td class="col-final-mult"><span class="live-mult"><span class="text-gray">0</span></span></td>
             <td class="col-amount"><span class="live-amount"><span class="text-gray">¥0</span></span></td>
             <td class="col-date">2026-07-20</td>
             <td class="col-nav">1.6299</td>
-            <td class="col-x"><span class="live-x"><span class="pct up">+10.99%</span></span></td>
+            <td class="col-x"><span class="live-x"><span class="pct up">+8.99%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
 <tr class="" data-code="008887" data-d="2.8703" data-e="1.9414" data-o="2.8703" data-w="2.0675" data-action="可补仓" data-n="2" data-s="10" data-level="倍投3级">
             <td class="col-cat">半导体</td>
             <td class="col-code">008887</td>
             <td class="col-name">华夏国证半导体芯片ETF</td>
-            <td class="col-dd down"><span class="live-dd"><span class="pct down">-29.67%</span></span></td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-32.36%</span></span></td>
             <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
@@ -1112,21 +1210,21 @@ setTimeout(mainLoop, 1000);
             <td class="col-action"><span class="action-badge" style="color:#E65100;background:#FFEB9C;">可补仓</span></td>
             <td class="col-level-combined"><span class="level-badge level-3">倍投3级</span> <span class="mult-val">2倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct up">+2.69%</span></span></td>
-            <td class="col-q"><span class="live-q"><span class="pct down">-29.67%</span></span></td>
-            <td class="col-shares"><span class="live-shares"><span class="shares-val">29</span></span></td>
+            <td class="col-q"><span class="live-q"><span class="pct down">-32.36%</span></span></td>
+            <td class="col-shares"><span class="live-shares"><span class="shares-val">32</span></span></td>
             <td class="col-price">10</td>
-            <td class="col-final-mult"><span class="live-mult"><span class="guide-mult">58</span></span></td>
-            <td class="col-amount"><span class="live-amount"><span class="amt-val">¥580</span></span></td>
+            <td class="col-final-mult"><span class="live-mult"><span class="guide-mult">64</span></span></td>
+            <td class="col-amount"><span class="live-amount"><span class="amt-val">¥640</span></span></td>
             <td class="col-date">2026-07-20</td>
             <td class="col-nav">2.0675</td>
-            <td class="col-x"><span class="live-x"><span class="pct down">-3.41%</span></span></td>
+            <td class="col-x"><span class="live-x"><span class="pct down">-6.10%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
 <tr class="row-watch" data-code="018344" data-d="1.4532" data-e="1.1632" data-o="1.4532" data-w="1.1254" data-action="关注" data-n="1.5" data-s="10" data-level="倍投2级">
             <td class="col-cat">机器人</td>
             <td class="col-code">018344</td>
             <td class="col-name">华夏中证机器人ETF联接A</td>
-            <td class="col-dd down"><span class="live-dd"><span class="pct down">-14.39%</span></span></td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-19.96%</span></span></td>
             <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
@@ -1151,21 +1249,21 @@ setTimeout(mainLoop, 1000);
             <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
             <td class="col-level-combined"><span class="level-badge level-2">倍投2级</span> <span class="mult-val">1.5倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct up">+5.57%</span></span></td>
-            <td class="col-q"><span class="live-q"><span class="pct down">-14.39%</span></span></td>
+            <td class="col-q"><span class="live-q"><span class="pct down">-19.96%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
             <td class="col-price">10</td>
             <td class="col-final-mult"><span class="live-mult"><span class="text-gray">0</span></span></td>
             <td class="col-amount"><span class="live-amount"><span class="text-gray">¥0</span></span></td>
             <td class="col-date">2026-07-24</td>
             <td class="col-nav">1.1254</td>
-            <td class="col-x"><span class="live-x"><span class="pct up">+8.93%</span></span></td>
+            <td class="col-x"><span class="live-x"><span class="pct up">+3.36%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
 <tr class="" data-code="001790" data-d="3.449" data-e="2.2299" data-o="2.7582" data-w="2.241" data-action="可补仓" data-n="3" data-s="10" data-level="倍投4级">
             <td class="col-cat">智能汽车/无人驾驶</td>
             <td class="col-code">001790</td>
             <td class="col-name">国泰智能汽车股票A</td>
-            <td class="col-dd down"><span class="live-dd"><span class="pct down">-31.68%</span></span></td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-35.35%</span></span></td>
             <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
@@ -1190,21 +1288,21 @@ setTimeout(mainLoop, 1000);
             <td class="col-action"><span class="action-badge" style="color:#E65100;background:#FFEB9C;">可补仓</span></td>
             <td class="col-level-combined"><span class="level-badge level-4">倍投4级</span> <span class="mult-val">3倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct up">+3.67%</span></span></td>
-            <td class="col-q"><span class="live-q"><span class="pct down">-15.48%</span></span></td>
-            <td class="col-shares"><span class="live-shares"><span class="shares-val">15</span></span></td>
+            <td class="col-q"><span class="live-q"><span class="pct down">-19.15%</span></span></td>
+            <td class="col-shares"><span class="live-shares"><span class="shares-val">19</span></span></td>
             <td class="col-price">10</td>
-            <td class="col-final-mult"><span class="live-mult"><span class="guide-mult">45</span></span></td>
-            <td class="col-amount"><span class="live-amount"><span class="amt-val">¥450</span></span></td>
+            <td class="col-final-mult"><span class="live-mult"><span class="guide-mult">57</span></span></td>
+            <td class="col-amount"><span class="live-amount"><span class="amt-val">¥570</span></span></td>
             <td class="col-date">2026-07-20</td>
             <td class="col-nav">2.2410</td>
-            <td class="col-x"><span class="live-x"><span class="pct up">+3.17%</span></span></td>
+            <td class="col-x"><span class="live-x"><span class="pct down">-0.50%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
 <tr class="row-watch" data-code="014414" data-d="1.2169" data-e="0.7597" data-o="0.9284" data-w="0.6829" data-action="关注" data-n="3" data-s="10" data-level="倍投4级">
             <td class="col-cat">猪肉</td>
             <td class="col-code">014414</td>
             <td class="col-name">招商中证畜牧养殖ETF联接A</td>
-            <td class="col-dd down"><span class="live-dd"><span class="pct down">-36.89%</span></span></td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-37.57%</span></span></td>
             <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
@@ -1229,21 +1327,21 @@ setTimeout(mainLoop, 1000);
             <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
             <td class="col-level-combined"><span class="level-badge level-4">倍投4级</span> <span class="mult-val">3倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct up">+0.68%</span></span></td>
-            <td class="col-q"><span class="live-q"><span class="pct down">-17.49%</span></span></td>
+            <td class="col-q"><span class="live-q"><span class="pct down">-18.17%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
             <td class="col-price">10</td>
             <td class="col-final-mult"><span class="live-mult"><span class="text-gray">0</span></span></td>
             <td class="col-amount"><span class="live-amount"><span class="text-gray">¥0</span></span></td>
             <td class="col-date">2026-06-25</td>
             <td class="col-nav">0.6829</td>
-            <td class="col-x"><span class="live-x"><span class="pct up">+11.93%</span></span></td>
+            <td class="col-x"><span class="live-x"><span class="pct up">+11.25%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
 <tr class="" data-code="006098" data-d="1.8708" data-e="1.5474" data-o="1.787" data-w="1.4073" data-action="观望" data-n="1" data-s="10" data-level="倍投1级">
             <td class="col-cat">券商</td>
             <td class="col-code">006098</td>
             <td class="col-name">华宝券商ETF联接A</td>
-            <td class="col-dd down"><span class="live-dd"><span class="pct down">-17.46%</span></span></td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-17.29%</span></span></td>
             <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
@@ -1268,21 +1366,21 @@ setTimeout(mainLoop, 1000);
             <td class="col-action"><span class="action-badge" style="color:#7F8C8D;background:#EAEDED;">观望</span></td>
             <td class="col-level-combined"><span class="level-badge level-1">倍投1级</span> <span class="mult-val">1倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct down">-0.17%</span></span></td>
-            <td class="col-q"><span class="live-q"><span class="pct down">-13.58%</span></span></td>
+            <td class="col-q"><span class="live-q"><span class="pct down">-13.41%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
             <td class="col-price">10</td>
             <td class="col-final-mult"><span class="live-mult"><span class="text-gray">0</span></span></td>
             <td class="col-amount"><span class="live-amount"><span class="text-gray">¥0</span></span></td>
             <td class="col-date">2026-06-08</td>
             <td class="col-nav">1.4073</td>
-            <td class="col-x"><span class="live-x"><span class="pct up">+9.79%</span></span></td>
+            <td class="col-x"><span class="live-x"><span class="pct up">+9.96%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
 <tr class="row-watch" data-code="011608" data-d="1.6749" data-e="1.2655" data-o="1.6749" data-w="1.3205" data-action="关注" data-n="1.5" data-s="10" data-level="倍投2级">
             <td class="col-cat">科创50</td>
             <td class="col-code">011608</td>
             <td class="col-name">易方达科创50联接A</td>
-            <td class="col-dd down"><span class="live-dd"><span class="pct down">-21.58%</span></span></td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-24.44%</span></span></td>
             <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
@@ -1307,21 +1405,21 @@ setTimeout(mainLoop, 1000);
             <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
             <td class="col-level-combined"><span class="level-badge level-2">倍投2级</span> <span class="mult-val">1.5倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct up">+2.86%</span></span></td>
-            <td class="col-q"><span class="live-q"><span class="pct down">-21.58%</span></span></td>
+            <td class="col-q"><span class="live-q"><span class="pct down">-24.44%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
             <td class="col-price">10</td>
             <td class="col-final-mult"><span class="live-mult"><span class="text-gray">0</span></span></td>
             <td class="col-amount"><span class="live-amount"><span class="text-gray">¥0</span></span></td>
             <td class="col-date">2026-07-17</td>
             <td class="col-nav">1.3205</td>
-            <td class="col-x"><span class="live-x"><span class="pct down">-1.31%</span></span></td>
+            <td class="col-x"><span class="live-x"><span class="pct down">-4.17%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
 <tr class="row-watch" data-code="003765" data-d="2.3474" data-e="1.8149" data-o="2.3474" data-w="1.859" data-action="关注" data-n="1.5" data-s="10" data-level="倍投2级">
             <td class="col-cat">创业板</td>
             <td class="col-code">003765</td>
             <td class="col-name">广发创业板ETF联接A</td>
-            <td class="col-dd down"><span class="live-dd"><span class="pct down">-19.74%</span></span></td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-22.68%</span></span></td>
             <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
@@ -1346,21 +1444,21 @@ setTimeout(mainLoop, 1000);
             <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
             <td class="col-level-combined"><span class="level-badge level-2">倍投2级</span> <span class="mult-val">1.5倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct up">+2.94%</span></span></td>
-            <td class="col-q"><span class="live-q"><span class="pct down">-19.74%</span></span></td>
+            <td class="col-q"><span class="live-q"><span class="pct down">-22.68%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
             <td class="col-price">10</td>
             <td class="col-final-mult"><span class="live-mult"><span class="text-gray">0</span></span></td>
             <td class="col-amount"><span class="live-amount"><span class="text-gray">¥0</span></span></td>
             <td class="col-date">2026-07-17</td>
             <td class="col-nav">1.8590</td>
-            <td class="col-x"><span class="live-x"><span class="pct up">+0.57%</span></span></td>
+            <td class="col-x"><span class="live-x"><span class="pct down">-2.37%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
 <tr class="row-watch" data-code="025656" data-d="1.2999" data-e="0.993" data-o="1.282" data-w="0.9946" data-action="关注" data-n="1.5" data-s="10" data-level="倍投2级">
             <td class="col-cat">量化中小盘</td>
             <td class="col-code">025656</td>
             <td class="col-name">国金智远量化A</td>
-            <td class="col-dd down"><span class="live-dd"><span class="pct down">-20.90%</span></span></td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-23.61%</span></span></td>
             <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
@@ -1385,21 +1483,21 @@ setTimeout(mainLoop, 1000);
             <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
             <td class="col-level-combined"><span class="level-badge level-2">倍投2级</span> <span class="mult-val">1.5倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct up">+2.71%</span></span></td>
-            <td class="col-q"><span class="live-q"><span class="pct down">-19.83%</span></span></td>
+            <td class="col-q"><span class="live-q"><span class="pct down">-22.54%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
             <td class="col-price">10</td>
             <td class="col-final-mult"><span class="live-mult"><span class="text-gray">0</span></span></td>
             <td class="col-amount"><span class="live-amount"><span class="text-gray">¥0</span></span></td>
             <td class="col-date">2026-07-20</td>
             <td class="col-nav">0.9946</td>
-            <td class="col-x"><span class="live-x"><span class="pct up">+2.55%</span></span></td>
+            <td class="col-x"><span class="live-x"><span class="pct down">-0.16%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
 <tr class="row-watch" data-code="025880" data-d="1.9364" data-e="1.1712" data-o="1.9364" data-w="1.3201" data-action="关注" data-n="3" data-s="10" data-level="倍投4级">
             <td class="col-cat">CPO</td>
             <td class="col-code">025880</td>
             <td class="col-name">汇添富科技领先混合A</td>
-            <td class="col-dd down"><span class="live-dd"><span class="pct down">-33.96%</span></span></td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-39.52%</span></span></td>
             <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
@@ -1424,21 +1522,21 @@ setTimeout(mainLoop, 1000);
             <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
             <td class="col-level-combined"><span class="level-badge level-4">倍投4级</span> <span class="mult-val">3倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct up">+5.56%</span></span></td>
-            <td class="col-q"><span class="live-q"><span class="pct down">-33.96%</span></span></td>
+            <td class="col-q"><span class="live-q"><span class="pct down">-39.52%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
             <td class="col-price">10</td>
             <td class="col-final-mult"><span class="live-mult"><span class="text-gray">0</span></span></td>
             <td class="col-amount"><span class="live-amount"><span class="text-gray">¥0</span></span></td>
             <td class="col-date">2026-07-24</td>
             <td class="col-nav">1.3201</td>
-            <td class="col-x"><span class="live-x"><span class="pct down">-5.72%</span></span></td>
+            <td class="col-x"><span class="live-x"><span class="pct down">-11.28%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
 <tr class="row-watch" data-code="021420" data-d="2.6228" data-e="1.9005" data-o="2.6228" data-w="1.9915" data-action="关注" data-n="2" data-s="10" data-level="倍投3级">
             <td class="col-cat">存储芯片</td>
             <td class="col-code">021420</td>
             <td class="col-name">广发信创ETF联接A</td>
-            <td class="col-dd down"><span class="live-dd"><span class="pct down">-24.18%</span></span></td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-27.54%</span></span></td>
             <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
@@ -1463,21 +1561,21 @@ setTimeout(mainLoop, 1000);
             <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
             <td class="col-level-combined"><span class="level-badge level-3">倍投3级</span> <span class="mult-val">2倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct up">+3.36%</span></span></td>
-            <td class="col-q"><span class="live-q"><span class="pct down">-24.18%</span></span></td>
+            <td class="col-q"><span class="live-q"><span class="pct down">-27.54%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
             <td class="col-price">10</td>
             <td class="col-final-mult"><span class="live-mult"><span class="text-gray">0</span></span></td>
             <td class="col-amount"><span class="live-amount"><span class="text-gray">¥0</span></span></td>
             <td class="col-date">2026-07-17</td>
             <td class="col-nav">1.9915</td>
-            <td class="col-x"><span class="live-x"><span class="pct down">-1.21%</span></span></td>
+            <td class="col-x"><span class="live-x"><span class="pct down">-4.57%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
 <tr class="row-watch" data-code="013402" data-d="1.1155" data-e="0.7984" data-o="0.7361" data-w="0.7112" data-action="关注" data-n="2" data-s="10" data-level="倍投3级">
             <td class="col-cat">恒生科技</td>
             <td class="col-code">013402</td>
             <td class="col-name">华夏恒生科技ETF联接（QDII）A</td>
-            <td class="col-dd down"><span class="live-dd"><span class="pct down">-28.56%</span></span></td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-28.43%</span></span></td>
             <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
@@ -1502,21 +1600,21 @@ setTimeout(mainLoop, 1000);
             <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
             <td class="col-level-combined"><span class="level-badge level-3">倍投3级</span> <span class="mult-val">2倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct down">-0.13%</span></span></td>
-            <td class="col-q"><span class="live-q"><span class="pct up">+8.33%</span></span></td>
+            <td class="col-q"><span class="live-q"><span class="pct up">+8.46%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
             <td class="col-price">10</td>
             <td class="col-final-mult"><span class="live-mult"><span class="text-gray">0</span></span></td>
             <td class="col-amount"><span class="live-amount"><span class="text-gray">¥0</span></span></td>
             <td class="col-date">2026-06-26</td>
             <td class="col-nav">0.7112</td>
-            <td class="col-x"><span class="live-x"><span class="pct up">+12.13%</span></span></td>
+            <td class="col-x"><span class="live-x"><span class="pct up">+12.26%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
 <tr class="" data-code="161725" data-d="1.6466" data-e="0.5842" data-o="1.6466" data-w="0.4959" data-action="可补仓" data-n="6" data-s="10" data-level="极限2级">
             <td class="col-cat">白酒</td>
             <td class="col-code">161725</td>
             <td class="col-name">招商中证白酒A</td>
-            <td class="col-dd down"><span class="live-dd"><span class="pct down">-65.15%</span></span></td>
+            <td class="col-dd down"><span class="live-dd"><span class="pct down">-64.52%</span></span></td>
             <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
@@ -1541,14 +1639,14 @@ setTimeout(mainLoop, 1000);
             <td class="col-action"><span class="action-badge" style="color:#E65100;background:#FFEB9C;">可补仓</span></td>
             <td class="col-level-combined"><span class="level-badge level-extreme-2">极限2级</span> <span class="mult-val">6倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct down">-0.63%</span></span></td>
-            <td class="col-q"><span class="live-q"><span class="pct down">-65.15%</span></span></td>
-            <td class="col-shares"><span class="live-shares"><span class="shares-val">65</span></span></td>
+            <td class="col-q"><span class="live-q"><span class="pct down">-64.52%</span></span></td>
+            <td class="col-shares"><span class="live-shares"><span class="shares-val">64</span></span></td>
             <td class="col-price">10</td>
-            <td class="col-final-mult"><span class="live-mult"><span class="guide-mult">390</span></span></td>
-            <td class="col-amount"><span class="live-amount"><span class="amt-val">¥3,900</span></span></td>
+            <td class="col-final-mult"><span class="live-mult"><span class="guide-mult">384</span></span></td>
+            <td class="col-amount"><span class="live-amount"><span class="amt-val">¥3,840</span></span></td>
             <td class="col-date">2026-07-09</td>
             <td class="col-nav">0.4959</td>
-            <td class="col-x"><span class="live-x"><span class="pct up">+17.18%</span></span></td>
+            <td class="col-x"><span class="live-x"><span class="pct up">+17.81%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
 </tbody>
@@ -1565,5 +1663,47 @@ setTimeout(mainLoop, 1000);
 </div>
 
 </div>
+<script>
+(function () {
+  var landscapeBtn = document.getElementById('landscape-toggle');
+  var portraitBtn = document.getElementById('portrait-toggle');
+  var rotateTip = document.getElementById('rotate-tip');
+  var hint = document.getElementById('orientation-hint');
+  function isLandscape() {
+    return window.matchMedia && window.matchMedia('(orientation: landscape)').matches;
+  }
+  function syncOrientationUI() {
+    var landscape = isLandscape();
+    document.body.classList.toggle('preview-landscape', landscape);
+    if (hint) hint.textContent = landscape
+      ? '横屏增强已启用：左侧基金信息固定，可横向浏览完整指标。'
+      : '横屏后可同时查看更多列，左侧基金信息会固定。';
+    if (rotateTip && landscape) rotateTip.style.display = 'none';
+  }
+  async function requestLandscape() {
+    var locked = false;
+    try {
+      if (screen.orientation && screen.orientation.lock) {
+        await screen.orientation.lock('landscape');
+        locked = true;
+      }
+    } catch (error) { locked = false; }
+    if (!locked && rotateTip) rotateTip.style.display = 'block';
+    syncOrientationUI();
+  }
+  async function requestPortrait() {
+    try {
+      if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock();
+    } catch (error) {}
+    if (rotateTip) rotateTip.style.display = 'none';
+    syncOrientationUI();
+  }
+  if (landscapeBtn) landscapeBtn.addEventListener('click', requestLandscape);
+  if (portraitBtn) portraitBtn.addEventListener('click', requestPortrait);
+  window.addEventListener('orientationchange', syncOrientationUI);
+  window.addEventListener('resize', syncOrientationUI);
+  syncOrientationUI();
+})();
+</script>
 </body>
 </html>

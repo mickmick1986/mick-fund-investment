@@ -201,18 +201,18 @@ def setup_new_row_formulas(ws, row):
     if g_val and str(g_val).startswith('='):
         return False
 
-    ws.cell(row=row, column=7).value = f'=(E{row}-D{row})/D{row}+F{row}'
+    ws.cell(row=row, column=7).value = f'=(E{row}-D{row})/D{row}'
     ws.cell(row=row, column=7).number_format = '0.00%'
     ws.cell(row=row, column=16).value = f'=(E{row}-O{row})/O{row}'
     ws.cell(row=row, column=16).number_format = '0.00%'
-    ws.cell(row=row, column=17).value = f'=F{row}+P{row}'
+    ws.cell(row=row, column=17).value = f'=P{row}'
     ws.cell(row=row, column=17).number_format = '0.00%'
     ws.cell(row=row, column=18).value = f'=IF(OR(L{row}="强烈补仓",L{row}="建议补仓",L{row}="可补仓"),MAX(IF(Q{row}<0,INT(-Q{row}*100),0),1),0)'
     if not ws.cell(row=row, column=19).value:
         ws.cell(row=row, column=19).value = 10
     ws.cell(row=row, column=20).value = f'=N{row}*R{row}'
     ws.cell(row=row, column=21).value = f'=S{row}*T{row}'
-    ws.cell(row=row, column=24).value = f'=((E{row}-W{row})/W{row})+F{row}'
+    ws.cell(row=row, column=24).value = f'=(E{row}-W{row})/W{row}'
     ws.cell(row=row, column=24).number_format = '0.00%'
     if not ws.cell(row=row, column=26).value:
         ws.cell(row=row, column=26).value = "否"
@@ -265,8 +265,10 @@ def main():
     with open(DATA_PATH, 'r', encoding='utf-8') as f:
         data = json.load(f)
     funds = data['funds']
+    final_nav_mode = data.get('data_mode') == 'final_nav'
     fund_by_code = {f['code']: f for f in funds}
-    print(f"📊 加载了 {len(funds)} 只基金数据(enriched JSON)")
+    mode_name = '早间确认净值模式' if final_nav_mode else '盘中估值模式'
+    print(f"📊 加载了 {len(funds)} 只基金数据(enriched JSON) | {mode_name}")
 
     # 2. 从_已更新.xlsx读取O列锚点净值
     print(f"\n📖 读取_已更新.xlsx中的O列锚点净值...")
@@ -356,10 +358,21 @@ def main():
             ws.cell(row=row, column=5).value = fund['latest_nav']
             ws.cell(row=row, column=5).number_format = '0.0000'
 
-            # F列: 当天涨跌（非交易日留空）
-            dc = fund['daily_change']
-            ws.cell(row=row, column=6).value = None if dc is None else dc / 100
+            # 最终结算模式：F列清空，且G/Q/X只按确认净值计算，防止F与E重复计入当日涨跌。
+            if final_nav_mode:
+                ws.cell(row=row, column=6).value = None
+            else:
+                dc = fund['daily_change']
+                ws.cell(row=row, column=6).value = None if dc is None else dc / 100
             ws.cell(row=row, column=6).number_format = '0.00%'
+            ws.cell(row=row, column=7).value = f'=(E{row}-D{row})/D{row}'
+            ws.cell(row=row, column=7).number_format = '0.00%'
+            ws.cell(row=row, column=16).value = f'=(E{row}-O{row})/O{row}'
+            ws.cell(row=row, column=16).number_format = '0.00%'
+            ws.cell(row=row, column=17).value = f'=P{row}'
+            ws.cell(row=row, column=17).number_format = '0.00%'
+            ws.cell(row=row, column=24).value = f'=(E{row}-W{row})/W{row}'
+            ws.cell(row=row, column=24).number_format = '0.00%'
 
             # H列: RSI数值
             ws.cell(row=row, column=8).value = fund['rsi']

@@ -60,7 +60,8 @@ def load_excel():
     return rows
 
 def compute_formulas(excel_rows):
-    """在Python中计算Excel公式列的值（data_only=True拿不到缓存值）"""
+    """在Python中计算静态确认净值公式列（data_only=True拿不到缓存值）。
+    F列是盘中展示字段，不能参与静态G/Q/X计算，否则E已为最终净值时会重复计入。"""
     for er in excel_rows:
         e = er.get('e_val')  # E: 最新净值
         d = er.get('d_val')  # D: 历史最高净值
@@ -87,11 +88,9 @@ def compute_formulas(excel_rows):
         n_n = to_float(n_val)
         s_n = to_float(s_val)
         
-        # G = (E-D)/D + F
+        # G = (E-D)/D；E是确认净值，静态计算不叠加F。
         if e_n is not None and d_n is not None and d_n != 0:
             g_val = (e_n - d_n) / d_n
-            if f_n is not None:
-                g_val += f_n  # F is already decimal (e.g. 0.0056 for 0.56%)
         else:
             g_val = None
         er['drawdown'] = g_val
@@ -103,15 +102,8 @@ def compute_formulas(excel_rows):
             p_val = None
         er['p_val'] = p_val
         
-        # Q = F + P
-        if f_n is not None:
-            q_val = f_n  # F already decimal
-            if p_val is not None:
-                q_val += p_val
-        elif p_val is not None:
-            q_val = p_val
-        else:
-            q_val = None
+        # Q = P = (E-O)/O；锚点比较直接以确认净值计算。
+        q_val = p_val
         er['q_val'] = q_val
         
         # R = IF(OR(L="强烈补仓",L="建议补仓",L="可补仓"),MAX(IF(Q<0,INT(-Q*100),0),1),0)
@@ -138,11 +130,9 @@ def compute_formulas(excel_rows):
             u_val = None
         er['amount'] = u_val
         
-        # X = ((E-W)/W) + F
+        # X = (E-W)/W；底谷涨幅直接以确认净值计算。
         if e_n is not None and w_n is not None and w_n != 0:
             x_val = (e_n - w_n) / w_n
-            if f_n is not None:
-                x_val += f_n  # F already decimal
         else:
             x_val = None
         er['x_gain'] = x_val
@@ -178,9 +168,10 @@ def fmt_pct(v, fallback='—'):
     cls = 'up' if pct > 0 else ('down' if pct < 0 else 'flat')
     return f'<span class="pct {cls}">{sign}{pct:.2f}%</span>'
 
-def fmt_daily_change(dc):
+def fmt_daily_change(dc, final_nav_mode=False):
     if dc is None:
-        return '<span class="pct flat">休市</span>'
+        label = '已确认' if final_nav_mode else '休市'
+        return f'<span class="pct flat">{label}</span>'
     try:
         v = float(dc)
     except (ValueError, TypeError):
@@ -431,6 +422,7 @@ def safe_nav(v):
 
 def generate():
     json_data = load_json()
+    final_nav_mode = json_data.get('data_mode') == 'final_nav'
     excel_rows = load_excel()
     compute_formulas(excel_rows)  # 在Python中计算G/P/Q/R/T/U/X，不依赖Excel缓存
     funds = merge_data(excel_rows, json_data)
@@ -485,7 +477,7 @@ def generate():
             <td class="col-val">{val_display(f)}</td>
             <td class="col-action">{action_display(f)}</td>
             <td class="col-level-combined">{level_badge(f['level'])} {mult_display(f['grade_mult'])}</td>
-            <td class="col-change"><span class="live-change">{fmt_daily_change(f['daily_change'])}</span></td>
+            <td class="col-change"><span class="live-change">{fmt_daily_change(f['daily_change'], final_nav_mode)}</span></td>
             <td class="col-q"><span class="live-q">{fmt_pct(f['q_val'])}</span></td>
             <td class="col-shares"><span class="live-shares">{safe_shares(f['shares'])}</span></td>
             <td class="col-price">{safe_num(f['unit_price'], 0)}</td>
@@ -797,11 +789,90 @@ tbody td:last-child {{ border-right: none; }}
 }}
 .footer strong {{ color: #444; }}
 
-@media (max-width: 768px) {{
-  body {{ padding: 8px; }}
-  .top-bar {{ flex-direction: column; align-items: flex-start; }}
+/* ===== 手机横屏增强：保留完整表格的一览式框架 ===== */
+.mobile-orientation-bar {{
+  display: none;
+  background: #173a62;
+  color: #fff;
+  padding: 9px 12px;
+  border-radius: 10px 10px 0 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.12);
 }}
-.live-est {{
+.orientation-copy {{ min-width: 0; }}
+.orientation-title {{ font-size: 13px; font-weight: 700; }}
+.orientation-hint {{ font-size: 10px; opacity: .84; margin-top: 1px; }}
+.orientation-actions {{ display: flex; align-items: center; gap: 6px; flex-shrink: 0; }}
+.orientation-btn {{
+  appearance: none; border: 1px solid rgba(255,255,255,.42); background: #fff;
+  color: #173a62; border-radius: 7px; padding: 7px 9px; font-weight: 700;
+  font-size: 12px; white-space: nowrap; cursor: pointer;
+}}
+.orientation-btn.secondary {{ background: transparent; color: #fff; display: none; }}
+.rotate-tip {{
+  display: none; margin: 0; padding: 8px 12px; background: #fff6df;
+  color: #795700; border: 1px solid #f1d890; border-top: 0; font-size: 11px;
+}}
+body.preview-landscape .orientation-btn.secondary {{ display: inline-block; }}
+body.preview-landscape .top-bar {{ border-radius: 0; }}
+/* 以高度识别横屏手机，避免横屏后 CSS 宽度超过 768px 而误回桌面样式。 */
+@media (max-width: 768px), (max-height: 500px) and (orientation: landscape) {{
+  body {{ padding: 6px; }}
+  .container {{ max-width: none; }}
+  .mobile-orientation-bar {{ display: flex; }}
+  .top-bar {{ padding: 9px 12px; gap: 4px; flex-direction: column; align-items: flex-start; }}
+  .top-bar .main-title {{ font-size: 15px; letter-spacing: .3px; }}
+  .top-bar .stats {{ display: block; margin-top: 3px; font-size: 12px; }}
+  .market-bar {{ padding: 7px 10px; gap: 8px 13px; max-height: 76px; overflow: hidden; }}
+  .market-bar .m-label {{ font-size: 11px; }}
+  .market-bar .m-val {{ font-size: 11px; }}
+  .footer {{ margin-top: 8px; padding: 8px 10px; font-size: 10px; }}
+  .table-wrap {{ border-radius: 0 0 8px 8px; -webkit-overflow-scrolling: touch; }}
+}}
+@media ((max-width: 768px) and (orientation: landscape)), ((max-height: 500px) and (orientation: landscape)) {{
+  body {{ padding: 4px; font-size: 11px; }}
+  .mobile-orientation-bar {{ padding: 5px 9px; border-radius: 7px 7px 0 0; }}
+  .orientation-title {{ font-size: 11px; }}
+  .orientation-hint {{ display: none; }}
+  .orientation-btn {{ font-size: 10px; padding: 4px 7px; }}
+  .top-bar {{ padding: 6px 10px; min-height: 34px; flex-direction: row; align-items: center; }}
+  .top-bar .main-title {{ font-size: 13px; }}
+  .top-bar .stats {{ display: inline; margin-left: 6px; font-size: 10px; }}
+  .top-bar > div:last-child {{ font-size: 9px !important; }}
+  .market-bar {{ padding: 5px 8px; gap: 4px 11px; max-height: 48px; overflow: auto; }}
+  .market-bar .m-label, .market-bar .m-val {{ font-size: 10px; }}
+  .table-wrap {{ max-height: calc(100vh - 98px); overflow: auto; isolation: isolate; }}
+  table {{ min-width: 1350px; font-size: 10.5px; border-collapse: separate; border-spacing: 0; }}
+  .region-row th {{ padding: 4px 3px; font-size: 11px; height: 26px; }}
+  .header-row th {{ padding: 5px 3px; font-size: 10px; height: 30px; }}
+  tbody td {{ padding: 4px 3px; font-size: 10px; }}
+  .col-cat {{ min-width: 58px; font-size: 10px; }}
+  .col-code {{ min-width: 53px; font-size: 10px; }}
+  .col-name {{ min-width: 130px; font-size: 11px; padding-left: 5px; }}
+  .col-rsi {{ min-width: 116px; }}
+  .col-val {{ min-width: 80px; font-size: 10px; }}
+  .col-action {{ min-width: 76px; }}
+  .col-level-combined {{ min-width: 94px; }}
+  .rsi-badge, .level-badge, .action-badge {{ font-size: 9.5px; padding: 2px 5px; }}
+  .guide-mult, .amt-val, .pct, .pct.up, .pct.down {{ font-size: 11px; }}
+  /* 两级标题固定在表格滚动区顶部，避免数据行穿透覆盖。 */
+  thead {{ position: relative; z-index: 40; }}
+  thead .region-row th {{ position: sticky; top: 0; z-index: 42; background-clip: padding-box; box-shadow: 0 1px 0 rgba(255,255,255,.2); }}
+  thead .header-row th {{ position: sticky; top: 26px; z-index: 41; background: #2c3e50; background-clip: padding-box; box-shadow: 0 2px 3px rgba(0,0,0,.22); }}
+  /* 横向滚动时固定基金上下文。 */
+  thead .header-row th:nth-child(1), tbody td:nth-child(1) {{ position: sticky; left: 0; z-index: 20; }}
+  thead .header-row th:nth-child(2), tbody td:nth-child(2) {{ position: sticky; left: 58px; z-index: 20; }}
+  thead .header-row th:nth-child(3), tbody td:nth-child(3) {{ position: sticky; left: 111px; z-index: 20; box-shadow: 3px 0 5px rgba(0,0,0,.13); }}
+  .region-row th.region-info {{ position: sticky; left: 0; z-index: 45; }}
+  thead .header-row th:nth-child(-n+3) {{ background: #556572; z-index: 46; }}
+  thead .region-row th.region-info {{ z-index: 47; }}
+  tbody td:nth-child(1), tbody td:nth-child(2), tbody td:nth-child(3) {{ background: #E8EDF2; }}
+  tbody tr.row-watch td:nth-child(1), tbody tr.row-watch td:nth-child(2), tbody tr.row-watch td:nth-child(3) {{ background: #FFFBEA; }}
+  .footer {{ display: none; }}
+}}
+.live-est {{ 
   color: #E67E22 !important;
   font-size: 12px;
 }}
@@ -826,6 +897,7 @@ tbody td:last-child {{ border-right: none; }}
 }}
 </style>
 <script>
+var FINAL_NAV_MODE = {str(final_nav_mode).lower()};
 // ========== 路线B 实时数据引擎 v2.0 ==========
 // 功能：盘中从天天基金API实时拉取净值 → 重算G/Q/R/S/T/U/U总计 → 更新页面
 // 时段：9:30-11:30/13:00-14:29 每5分钟 | 14:30-15:00 每30秒 | 盘后60秒整页刷新
@@ -1021,6 +1093,8 @@ function isTradingDay() {{
 }}
 
 function getRefreshMode() {{
+  // 晚间确认净值版本为结算快照，不再用盘中估值覆盖最终结果。
+  if (FINAL_NAV_MODE) return 'off';
   if (!isTradingDay()) return 'off';
   var now = new Date();
   var h = now.getHours();
@@ -1074,6 +1148,11 @@ function mainLoop() {{
     setTimeout(mainLoop, SLOW_INTERVAL);
     countdown = COUNTDOWN_START;
   }} else {{
+    if (FINAL_NAV_MODE) {{
+      if (statusEl) {{ statusEl.textContent = '✓确认净值'; statusEl.style.color = '#27AE60'; }}
+      if (timerEl && timerEl.parentNode) timerEl.parentNode.style.display = 'none';
+      return;
+    }}
     if (statusEl) {{ statusEl.textContent = '⏳盘后'; statusEl.style.color = '#7f8c8d'; }}
     // 恢复所有行静态数据
     funds.forEach(function(fd) {{ resetCell(fd); }});
@@ -1094,6 +1173,17 @@ setTimeout(mainLoop, 1000);
 </head>
 <body>
 <div class="container">
+<div class="mobile-orientation-bar" id="orientation-bar">
+  <div class="orientation-copy">
+    <div class="orientation-title">完整表格横屏查看</div>
+    <div class="orientation-hint" id="orientation-hint">横屏后可同时查看更多列，左侧基金信息会固定。</div>
+  </div>
+  <div class="orientation-actions">
+    <button class="orientation-btn" id="landscape-toggle" type="button">↻ 横屏查看</button>
+    <button class="orientation-btn secondary" id="portrait-toggle" type="button">返回竖屏</button>
+  </div>
+</div>
+<p class="rotate-tip" id="rotate-tip">请将手机旋转为横屏；此浏览器不支持自动锁定方向，但横屏后仍会启用紧凑表格和固定基金信息列。</p>
 
 <div class="top-bar">
   <div>
@@ -1175,6 +1265,48 @@ setTimeout(mainLoop, 1000);
 </div>
 
 </div>
+<script>
+(function () {{
+  var landscapeBtn = document.getElementById('landscape-toggle');
+  var portraitBtn = document.getElementById('portrait-toggle');
+  var rotateTip = document.getElementById('rotate-tip');
+  var hint = document.getElementById('orientation-hint');
+  function isLandscape() {{
+    return window.matchMedia && window.matchMedia('(orientation: landscape)').matches;
+  }}
+  function syncOrientationUI() {{
+    var landscape = isLandscape();
+    document.body.classList.toggle('preview-landscape', landscape);
+    if (hint) hint.textContent = landscape
+      ? '横屏增强已启用：左侧基金信息固定，可横向浏览完整指标。'
+      : '横屏后可同时查看更多列，左侧基金信息会固定。';
+    if (rotateTip && landscape) rotateTip.style.display = 'none';
+  }}
+  async function requestLandscape() {{
+    var locked = false;
+    try {{
+      if (screen.orientation && screen.orientation.lock) {{
+        await screen.orientation.lock('landscape');
+        locked = true;
+      }}
+    }} catch (error) {{ locked = false; }}
+    if (!locked && rotateTip) rotateTip.style.display = 'block';
+    syncOrientationUI();
+  }}
+  async function requestPortrait() {{
+    try {{
+      if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock();
+    }} catch (error) {{}}
+    if (rotateTip) rotateTip.style.display = 'none';
+    syncOrientationUI();
+  }}
+  if (landscapeBtn) landscapeBtn.addEventListener('click', requestLandscape);
+  if (portraitBtn) portraitBtn.addEventListener('click', requestPortrait);
+  window.addEventListener('orientationchange', syncOrientationUI);
+  window.addEventListener('resize', syncOrientationUI);
+  syncOrientationUI();
+}})();
+</script>
 </body>
 </html>'''
     

@@ -25,6 +25,7 @@ import subprocess
 import hashlib
 import urllib.request
 import io
+import argparse
 from datetime import datetime, timedelta, date
 from hashlib import md5
 from bs4 import BeautifulSoup
@@ -1679,7 +1680,37 @@ def check_trading_day():
         return True, f"交易日(检测异常: {e})"
 
 
+def previous_weekday(today):
+    """返回最近一个工作日。法定节假日由后续逐基金净值日期校验兜底。"""
+    candidate = today - timedelta(days=1)
+    while candidate.weekday() >= 5:
+        candidate -= timedelta(days=1)
+    return candidate
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description='金字塔丛林基金数据增强')
+    parser.add_argument(
+        '--final-nav',
+        action='store_true',
+        help='确认净值模式：仅接受指定目标日的确认净值；F列日内估算涨跌将清空。'
+    )
+    parser.add_argument(
+        '--target-nav-date',
+        help='确认净值目标日，格式YYYY-MM-DD；未指定时默认取最近一个工作日。'
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
+    final_nav_mode = args.final_nav
+    today = date.today()
+    expected_nav_date = previous_weekday(today)
+    run_date = args.target_nav_date or expected_nav_date.isoformat()
+    mode_name = '早间确认净值模式' if final_nav_mode else '盘中实时估值模式'
+    print(f'运行模式: {mode_name} | 目标净值日期: {run_date}')
+
     # ----- Step 0: 检测交易日状态 -----
     print("=" * 70)
     print("Step 0: 检测交易日状态...")
@@ -1717,6 +1748,7 @@ def main():
     funds.sort(key=lambda x: x[1].get('drawdown_pct', 0), reverse=True)
 
     enriched = []
+    unconfirmed_codes = []
     total = len(funds)
 
     print(f"\nStep 3: 开始处理 {total} 只基金...")
@@ -1736,8 +1768,20 @@ def main():
         latest_nav, latest_date, lsjz_change, prev_nav = fetch_latest_nav_and_change(code)
         time.sleep(0.3)
 
-        # 获取当天涨跌幅（非交易日跳过，F列留空）
-        if is_trading_day:
+        # 早间最终模式只接受目标日的确认净值；不依赖当前时点的盘中交易日判断。
+        # 早上9点尚未开盘，实时接口通常仍显示前一交易日，不能误判为“非交易日”。
+        nav_confirmed_today = bool(latest_date == run_date)
+        if final_nav_mode and not nav_confirmed_today:
+            reason = f'确认净值日期={latest_date or "缺失"}，尚未等于目标日{run_date}'
+            print(f"  ⏳ 未确认目标日净值，跳过写入：{reason}")
+            unconfirmed_codes.append(code)
+            continue
+
+        # F列仅供盘中估值展示。早间确认净值模式清空，避免与E列终值重复计入G/Q/X。
+        if final_nav_mode:
+            daily_change = None
+            change_source = f"确认净值({latest_date})"
+        elif is_trading_day:
             realtime_change, realtime_source = get_realtime_daily_change(code, index_code)
             if realtime_change is not None:
                 daily_change = realtime_change
@@ -1788,7 +1832,7 @@ def main():
             # 过滤掉None，保留有值的RSI序列（oldest→newest）
             rsi_history = [v for v in rsi_history_raw if v is not None]
 
-        if 'Sina' in change_source and daily_change is not None and recent_navs:
+        if not final_nav_mode and 'Sina' in change_source and daily_change is not None and recent_navs:
             # 当天估算净值 = 最新确认净值 × (1 + 当天涨跌幅%)
             estimated_nav = round(latest_nav * (1 + daily_change / 100), 4)
             rsi_new = calc_rsi_with_today(recent_navs, estimated_nav, 14)
@@ -1859,6 +1903,8 @@ def main():
             'index_code': index_code,
             'latest_nav': latest_nav,
             'latest_date': latest_date,
+            'final_nav_mode': final_nav_mode,
+            'nav_confirmed_today': nav_confirmed_today,
             'daily_change': None if daily_change is None else round(daily_change, 2),
             'daily_change_source': change_source,
             'all_time_high': all_time_high,
@@ -1905,10 +1951,20 @@ def main():
         }
         enriched.append(entry)
 
+    # 早间发布必须全量确认，不能用部分基金的旧快照覆盖正式JSON/Excel/公开页。
+    if final_nav_mode and unconfirmed_codes:
+        print(f"\n⚠️ 早间确认净值不完整：{len(unconfirmed_codes)}/{total} 只未确认（{', '.join(unconfirmed_codes)}）")
+        print("已停止保存与发布；请在下一轮重试，避免把旧净值当作当日最终净值。")
+        raise SystemExit(2)
+
     # ----- Step 4: 保存 -----
     output = {
         'update_time': time.strftime('%Y-%m-%d %H:%M:%S'),
+        'data_mode': 'final_nav' if final_nav_mode else 'intraday_estimate',
+        'target_nav_date': run_date,
         'fund_count': len(enriched),
+        'total_fund_count': total,
+        'unconfirmed_codes': unconfirmed_codes,
         'market_regime': regime_info,
         'funds': enriched,
     }
