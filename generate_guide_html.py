@@ -925,7 +925,16 @@ var funds = [];
       action: row.getAttribute('data-action') || '',
       grade_mult: parseFloat(row.getAttribute('data-n')) || 0,
       unit_price: parseFloat(row.getAttribute('data-s')) || 0,
-      level: row.getAttribute('data-level') || ''
+      level: row.getAttribute('data-level') || '',
+      staticCells: {{
+        change: (row.querySelector('.live-change') || {{}}).innerHTML || '',
+        dd: (row.querySelector('.live-dd') || {{}}).innerHTML || '',
+        q: (row.querySelector('.live-q') || {{}}).innerHTML || '',
+        shares: (row.querySelector('.live-shares') || {{}}).innerHTML || '',
+        mult: (row.querySelector('.live-mult') || {{}}).innerHTML || '',
+        amount: (row.querySelector('.live-amount') || {{}}).innerHTML || '',
+        x: (row.querySelector('.live-x') || {{}}).innerHTML || ''
+      }}
     }});
   }});
 }})();
@@ -987,14 +996,10 @@ function updateCell(fd, data) {{
     }}
   }}
 
-  // 3. Q列-近期总涨跌幅（实时重算）= F + P, P = (E-O)/O
-  var pVal = 0;
+  // 3. Q列-近期总涨跌幅：直接用实时估算净值对锚点计算，避免把两段百分比直接相加。
+  var qVal = 0;
   if (fd.anchor > 0) {{
-    pVal = (fd.nav - fd.anchor) / fd.anchor * 100;
-  }}
-  var qVal = gszzl;
-  if (fd.anchor > 0) {{
-    qVal = gszzl + pVal;
+    qVal = (estNav - fd.anchor) / fd.anchor * 100;
   }}
   var qCell = row.querySelector('.live-q');
   if (qCell) {{
@@ -1003,10 +1008,10 @@ function updateCell(fd, data) {{
     qCell.setAttribute('data-live', '1');
   }}
 
-  // 4. R列-补仓份数（实时重算）= IF(L∈buy_signals, MAX(INT(-Q),1), 0)
+  // 4. R列-补仓份数：qVal 已是百分数（如 -2.35），按整百分点向下取整，信号有效时最低 1 份。
   var shares = 0;
   if (BUY_SIGNALS.indexOf(fd.action) >= 0) {{
-    shares = Math.max(Math.floor(-qVal * 100), 1);
+    shares = Math.max(Math.floor(-qVal), 1);
   }}
   var sharesCell = row.querySelector('.live-shares');
   if (sharesCell) {{
@@ -1037,9 +1042,9 @@ function updateCell(fd, data) {{
     amtCell.setAttribute('data-live', amount > 0 ? '2' : '0');
   }}
 
-  // 7. X列-上涨幅度（实时重算）= ((E-W)/W) + F
+  // 7. X列-上涨幅度：直接用实时估算净值对最近底谷计算。
   if (fd.trough > 0) {{
-    var xVal = (fd.nav - fd.trough) / fd.trough * 100 + gszzl;
+    var xVal = (estNav - fd.trough) / fd.trough * 100;
     var xCell = row.querySelector('.live-x');
     if (xCell) {{
       var xCls = xVal > 0 ? 'up' : (xVal < 0 ? 'down' : 'flat');
@@ -1093,8 +1098,7 @@ function isTradingDay() {{
 }}
 
 function getRefreshMode() {{
-  // 晚间确认净值版本为结算快照，不再用盘中估值覆盖最终结果。
-  if (FINAL_NAV_MODE) return 'off';
+  // 确认净值只作为静态底稿；交易时段仍允许浏览器临时叠加实时估值。
   if (!isTradingDay()) return 'off';
   var now = new Date();
   var h = now.getHours();
@@ -1110,23 +1114,25 @@ function getRefreshMode() {{
   return 'off';
 }}
 
-// 恢复单行静态数据（盘后）
+// 恢复单行确认净值静态数据（盘后或休市）。
 function resetCell(fd) {{
   if (!fd._live) return;
   fd._live = false;
   var row = fd.row;
-  // 清除所有实时标记和实时标签
-  row.querySelectorAll('.live-est').forEach(function(s) {{
-    s.classList.remove('live-est');
+  var cells = fd.staticCells || {{}};
+  var mapping = [
+    ['.live-change', 'change'], ['.live-dd', 'dd'], ['.live-q', 'q'],
+    ['.live-shares', 'shares'], ['.live-mult', 'mult'], ['.live-amount', 'amount'], ['.live-x', 'x']
+  ];
+  mapping.forEach(function(item) {{
+    var cell = row.querySelector(item[0]);
+    if (cell && Object.prototype.hasOwnProperty.call(cells, item[1])) {{
+      cell.innerHTML = cells[item[1]];
+      cell.setAttribute('data-live', '0');
+    }}
   }});
-  row.querySelectorAll('.live-tag').forEach(function(t) {{ t.remove(); }});
-  row.querySelectorAll('[data-live]').forEach(function(c) {{
-    c.setAttribute('data-live', '0');
-  }});
-  // X列加回来的live-est类也要去掉
-  row.querySelectorAll('.live-x .live-est').forEach(function(s) {{
-    s.classList.remove('live-est');
-  }});
+  fd._shares = 0;
+  fd._amount = 0;
 }}
 
 // 主循环
@@ -1148,13 +1154,11 @@ function mainLoop() {{
     setTimeout(mainLoop, SLOW_INTERVAL);
     countdown = COUNTDOWN_START;
   }} else {{
-    if (FINAL_NAV_MODE) {{
-      if (statusEl) {{ statusEl.textContent = '✓确认净值'; statusEl.style.color = '#27AE60'; }}
-      if (timerEl && timerEl.parentNode) timerEl.parentNode.style.display = 'none';
-      return;
+    if (statusEl) {{
+      statusEl.textContent = FINAL_NAV_MODE ? '✓确认净值（盘后）' : '⏳盘后';
+      statusEl.style.color = FINAL_NAV_MODE ? '#27AE60' : '#7f8c8d';
     }}
-    if (statusEl) {{ statusEl.textContent = '⏳盘后'; statusEl.style.color = '#7f8c8d'; }}
-    // 恢复所有行静态数据
+    // 离开交易时段后恢复到 Excel 的确认净值静态底稿。
     funds.forEach(function(fd) {{ resetCell(fd); }});
     countdown--;
     if (timerEl) timerEl.textContent = countdown;
