@@ -681,7 +681,8 @@ function getRefreshMode() {
   if (total >= 780 && total < 870) return 'slow';
   // 14:30-15:00 高频窗口 → 快速
   if (total >= 870 && total <= 900) return 'fast';
-  // 盘后 → 停止实时拉取，等页面刷新
+  // 15:00后保留当日最后一笔估值，作为盘后复盘参考；快照跨日即自动失效。
+  if (total > 900) return 'afterclose';
   return 'off';
 }
 
@@ -733,12 +734,24 @@ function mainLoop() {
       updateAllFunds();
     }
     setTimeout(mainLoop, 60 * 1000);
+  } else if (mode === 'afterclose') {
+    if (statusEl) {
+      statusEl.textContent = '收盘估值参考';
+      statusEl.style.color = '#8B7355';
+    }
+    // 收盘后首次读取并保留15:00附近最后一笔估值，作为复盘参考；不写回Excel。
+    if (!window.__afterCloseEstimateLoaded) {
+      window.__afterCloseEstimateLoaded = true;
+      updateAllFunds();
+    }
+    if (timerEl) timerEl.textContent = '次日确认';
+    setTimeout(mainLoop, 5 * 60 * 1000);
   } else {
     if (statusEl) {
-      statusEl.textContent = FINAL_NAV_MODE ? '✓确认净值（盘后）' : '⏳盘后';
+      statusEl.textContent = FINAL_NAV_MODE ? '✓确认净值（休市）' : '⏳休市';
       statusEl.style.color = FINAL_NAV_MODE ? '#27AE60' : '#7f8c8d';
     }
-    // 离开交易时段后恢复到 Excel 的确认净值静态底稿。
+    // 周末/节假日或无同日快照时恢复Excel确认净值静态底稿。
     funds.forEach(function(fd) { resetCell(fd); });
     countdown--;
     if (timerEl) timerEl.textContent = countdown;
