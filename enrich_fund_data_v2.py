@@ -1823,14 +1823,18 @@ def main():
         recent_navs = fetch_recent_nav_history(code, count=45)
         time.sleep(0.2)
 
-        # RSI历史序列（用于折线图）—— 从确认净值计算
+        # RSI历史序列（用于折线图）—— 从确认净值计算。
+        # recent_navs 按 newest→oldest 排列；当前确认净值 RSI 必须与折线末值同源。
         rsi_history = None
+        confirmed_navs_desc = recent_navs[:21] if recent_navs else []
         if recent_navs:
-            # recent_navs: newest→oldest, 需要 oldest→newest 用于calc_rsi_series
             navs_old_to_new = list(reversed(recent_navs))
             rsi_history_raw = calc_rsi_series(navs_old_to_new, 14)
-            # 过滤掉None，保留有值的RSI序列（oldest→newest）
             rsi_history = [v for v in rsi_history_raw if v is not None]
+            confirmed_rsi = calc_rsi_with_today(recent_navs[1:], recent_navs[0], 14)
+            if confirmed_rsi is not None:
+                rsi = confirmed_rsi
+                rsi_source = f"确认净值({latest_date})"
 
         if not final_nav_mode and 'Sina' in change_source and daily_change is not None and recent_navs:
             # 当天估算净值 = 最新确认净值 × (1 + 当天涨跌幅%)
@@ -1839,22 +1843,23 @@ def main():
             if rsi_new is not None:
                 rsi = rsi_new
                 rsi_source = f"含当日估算({daily_change:+.2f}%)"
-                print(f"  RSI: {rsi} (含当日{daily_change:+.2f}%, 原T-1={rsi_old})")
-                # 在确认净值RSI序列末尾追加含当日估算的最新RSI值
+                print(f"  RSI: {rsi} (含当日{daily_change:+.2f}%, 确认RSI={confirmed_rsi})")
+                # 在确认净值 RSI 序列末尾追加含当日估算的最新 RSI 值。
                 if rsi_history is not None:
                     rsi_history.append(rsi_new)
             else:
-                print(f"  RSI: {rsi} (重算失败, 回退T-1值={rsi_old})")
+                print(f"  RSI: {rsi} (重算失败, 回退确认RSI)")
         else:
-            print(f"  RSI: {rsi} (T-1值, 无当天估值或历史净值)")
+            print(f"  RSI: {rsi} ({rsi_source})")
         rsi_signal = get_rsi_signal(rsi)
 
-        # 趋势判断：20日涨跌幅（区分"下跌中" vs "反弹中"）
+        # 趋势判断：严格取 21 个确认净值点，即最近 20 个交易日变化。
         trend_20d_pct = None
         trend_status = "未知"
-        if recent_navs and len(recent_navs) >= 2:
-            nav_latest = recent_navs[0]    # 最新确认净值
-            nav_oldest = recent_navs[-1]   # 窗口最远净值
+        trend_navs = recent_navs[:21] if recent_navs else []
+        if len(trend_navs) >= 2:
+            nav_latest = trend_navs[0]
+            nav_oldest = trend_navs[-1]
             if nav_oldest > 0:
                 trend_20d_pct = round((nav_latest - nav_oldest) / nav_oldest * 100, 2)
                 if trend_20d_pct > 0:
@@ -1915,6 +1920,9 @@ def main():
             'rsi': rsi,
             'rsi_signal': rsi_signal,
             'rsi_source': rsi_source,
+            'rsi_as_of_date': latest_date,
+            'rsi_history_end_date': latest_date,
+            'confirmed_navs_desc': confirmed_navs_desc,  # newest→oldest，供盘中RSI(14)重算
             'rsi_history': rsi_history,  # RSI历史序列 (oldest→newest)，用于折线图
             # K列
             'val_metric': val_metric,
@@ -1966,6 +1974,7 @@ def main():
         'total_fund_count': total,
         'unconfirmed_codes': unconfirmed_codes,
         'market_regime': regime_info,
+        'market_regime_params': regime_params,
         'funds': enriched,
     }
 

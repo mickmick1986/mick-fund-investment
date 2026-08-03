@@ -148,6 +148,8 @@ def merge_data(excel_rows, json_data):
         # Excel L列为权威来源，颜色从action文字本身推导，不用JSON覆盖
         m['rsi_signal_j'] = jf.get('rsi_signal', er.get('rsi_signal', ''))
         m['rsi_history'] = jf.get('rsi_history', [])
+        m['confirmed_navs_desc'] = jf.get('confirmed_navs_desc', [])
+        m['trend_20d_pct'] = jf.get('trend_20d_pct')
         m['val_metric'] = jf.get('val_metric', '')
         m['val_value'] = jf.get('val_value')
         m['val_signal'] = jf.get('val_signal', '')
@@ -468,15 +470,18 @@ def generate():
         grade_mult_val = f.get('grade_mult', '') or ''
         unit_price_val = f.get('unit_price', '') or ''
         level_val = f.get('level', '') or ''
-        rows.append(f'''<tr class="{row_cls}" data-code="{code}" data-d="{d_val}" data-e="{e_val}" data-o="{o_val}" data-w="{w_val}" data-action="{action_val}" data-n="{grade_mult_val}" data-s="{unit_price_val}" data-level="{level_val}">
+        confirmed_navs_json = json.dumps(f.get('confirmed_navs_desc', []), ensure_ascii=False)
+        trend_20d_val = f.get('trend_20d_pct')
+        val_signal_val = f.get('val_signal', '') or ''
+        rows.append(f'''<tr class="{row_cls}" data-code="{code}" data-d="{d_val}" data-e="{e_val}" data-o="{o_val}" data-w="{w_val}" data-action="{action_val}" data-n="{grade_mult_val}" data-s="{unit_price_val}" data-level="{level_val}" data-navs='{confirmed_navs_json}' data-val-signal="{val_signal_val}" data-trend20="{trend_20d_val if trend_20d_val is not None else ''}">
             <td class="col-cat">{f['cat']}</td>
             <td class="col-code">{code}</td>
             <td class="col-name">{f['name']}</td>
             <td class="col-dd down"><span class="live-dd">{fmt_pct(f['drawdown'])}</span></td>
-            <td class="col-rsi"><div class="rsi-cell-wrap">{rsi_line_chart(f.get('rsi_history', []), f['rsi'])}<div class="rsi-sig-inline">{rsi_signal_badge(f['rsi_signal_j'])}</div></div></td>
+            <td class="col-rsi live-rsi"><div class="rsi-cell-wrap">{rsi_line_chart(f.get('rsi_history', []), f['rsi'])}<div class="rsi-sig-inline">{rsi_signal_badge(f['rsi_signal_j'])}</div></div></td>
             <td class="col-val">{val_display(f)}</td>
-            <td class="col-action">{action_display(f)}</td>
-            <td class="col-level-combined">{level_badge(f['level'])} {mult_display(f['grade_mult'])}</td>
+            <td class="col-action live-action">{action_display(f)}</td>
+            <td class="col-level-combined live-level">{level_badge(f['level'])} {mult_display(f['grade_mult'])}</td>
             <td class="col-change"><span class="live-change">{fmt_daily_change(f['daily_change'], final_nav_mode)}</span></td>
             <td class="col-q"><span class="live-q">{fmt_pct(f['q_val'])}</span></td>
             <td class="col-shares"><span class="live-shares">{safe_shares(f['shares'])}</span></td>
@@ -930,9 +935,17 @@ function initFunds() {{
       grade_mult: parseFloat(row.getAttribute('data-n')) || 0,
       unit_price: parseFloat(row.getAttribute('data-s')) || 0,
       level: row.getAttribute('data-level') || '',
+      confirmed_navs_desc: (function() {{
+        try {{ return JSON.parse(row.getAttribute('data-navs') || '[]'); }} catch (e) {{ return []; }}
+      }})(),
+      val_signal: row.getAttribute('data-val-signal') || '',
+      trend_20d_pct: parseFloat(row.getAttribute('data-trend20')),
       staticCells: {{
         change: (row.querySelector('.live-change') || {{}}).innerHTML || '',
         dd: (row.querySelector('.live-dd') || {{}}).innerHTML || '',
+        rsi: (row.querySelector('.live-rsi') || {{}}).innerHTML || '',
+        action: (row.querySelector('.live-action') || {{}}).innerHTML || '',
+        level: (row.querySelector('.live-level') || {{}}).innerHTML || '',
         q: (row.querySelector('.live-q') || {{}}).innerHTML || '',
         shares: (row.querySelector('.live-shares') || {{}}).innerHTML || '',
         mult: (row.querySelector('.live-mult') || {{}}).innerHTML || '',
@@ -982,8 +995,105 @@ function updateSseIndex(snapshot) {{
     + '% ' + changeSign + Number(sse.change).toFixed(2) + ')</span>';
 }}
 
-// 核心：基于实时估值重算单行全部指标
-function updateCell(fd, data) {{
+function roundTo(value, decimals) {{
+  var factor = Math.pow(10, decimals);
+  return Math.round((value + Number.EPSILON) * factor) / factor;
+}}
+
+function getRsiSignal(rsi) {{
+  if (!isFinite(rsi)) return 'N/A';
+  if (rsi < 20) return '极度超卖';
+  if (rsi < 30) return '超卖';
+  if (rsi < 45) return '偏弱';
+  if (rsi <= 70) return '中性';
+  return '超买';
+}}
+
+function calcRsiWithToday(confirmedNavsDesc, estimatedNav, period) {{
+  period = period || 14;
+  var navs = [estimatedNav].concat(confirmedNavsDesc || []).slice(0, period + 1);
+  if (navs.length < period + 1) return null;
+  var gains = 0, losses = 0;
+  for (var i = 0; i < period; i++) {{
+    var change = navs[i] - navs[i + 1];
+    if (change > 0) gains += change;
+    if (change < 0) losses -= change;
+  }}
+  if (losses === 0) return 100;
+  return roundTo(100 - 100 / (1 + (gains / period) / (losses / period)), 1);
+}}
+
+function getLiveLevel(drawdownPct) {{
+  var levels = [
+    ['停止区', 0, 13, 0], ['观望区', 13, 15, 0.5], ['倍投1级', 15, 20, 1],
+    ['倍投2级', 20, 25, 1.5], ['倍投3级', 25, 33, 2], ['倍投4级', 33, 40, 3],
+    ['倍投5级', 40, 48, 4], ['极限1级', 48, 55, 5], ['极限2级', 55, 65, 6],
+    ['极限3级', 65, Infinity, 7]
+  ];
+  for (var i = 0; i < levels.length; i++) {{
+    if (drawdownPct >= levels[i][1] && drawdownPct < levels[i][2]) {{
+      return {{ name: levels[i][0], multiplier: levels[i][3] }};
+    }}
+  }}
+  return {{ name: '极限3级', multiplier: 7 }};
+}}
+
+function valuationClass(valSignal) {{
+  var value = String(valSignal || '');
+  if (value.indexOf('偏低') >= 0 || value.indexOf('低估') >= 0 || value.indexOf('跌破净值') >= 0 || value.indexOf('适中') >= 0) return 'good';
+  if (value.indexOf('偏高') >= 0 || value.indexOf('高估') >= 0) return 'bad';
+  return 'na';
+}}
+
+function getLiveAdvice(drawdownPct, rsi, valSignal, trend20dPct, regimeParams) {{
+  var valCls = valuationClass(valSignal);
+  var recovering = isFinite(trend20dPct) && trend20dPct > 0;
+  var strong = regimeParams && isFinite(regimeParams.rsi_tp_strong) ? regimeParams.rsi_tp_strong : 75;
+  var valThreshold = regimeParams && isFinite(regimeParams.rsi_tp_val) ? regimeParams.rsi_tp_val : 70;
+  var oversold = isFinite(rsi) && rsi < 30;
+  var overbought = isFinite(rsi) && rsi > valThreshold;
+  if (isFinite(rsi) && rsi > strong) return {{ action: '考虑止盈', meaning: 'RSI超高位，考虑分批止盈' }};
+  if (isFinite(rsi) && rsi > valThreshold && valCls === 'bad') return {{ action: '考虑止盈', meaning: '估值偏高+RSI超买，考虑止盈' }};
+  if (drawdownPct < 13) return {{ action: '暂不操作', meaning: '趋势完好，无需补仓' }};
+  if (drawdownPct < 15) return {{ action: '暂不操作', meaning: '接近警戒线，可关注等待' }};
+  if (drawdownPct < 20) return {{ action: oversold ? '观望' : '观望', meaning: oversold ? '回撤尚浅，等跌幅加深' : '信号不充分，持续观察' }};
+  if (drawdownPct < 33) {{
+    if (overbought) return {{ action: '警惕回调', meaning: '价格已反弹，不宜追高' }};
+    if (oversold) return {{ action: recovering ? '关注' : '可补仓', meaning: '回撤达标+RSI超卖，择机补仓' }};
+    return {{ action: '关注', meaning: '回撤达标但RSI未超卖，等待' }};
+  }}
+  if (drawdownPct < 55) {{
+    if (overbought) return {{ action: '警惕回调', meaning: '深跌后已反弹，不宜追高' }};
+    if (oversold) {{
+      if (valCls === 'bad') return {{ action: recovering ? '关注' : '可补仓', meaning: '回撤深+RSI超卖，但估值偏高需谨慎' }};
+      if (valCls === 'good') return {{ action: recovering ? '建议补仓' : '强烈补仓', meaning: '三指标共振，强烈建议补仓' }};
+      return {{ action: recovering ? '可补仓' : '建议补仓', meaning: '回撤深+RSI超卖' }};
+    }}
+    if (valCls === 'bad') return {{ action: '关注', meaning: '回撤深但估值高+RSI中性，等待确认' }};
+    return {{ action: recovering ? '关注' : '可补仓', meaning: '回撤深但RSI未超卖，择机补仓' }};
+  }}
+  if (overbought) return {{ action: '警惕回调', meaning: '深跌后已大幅反弹，不宜追高' }};
+  if (oversold) {{
+    if (valCls === 'bad') return {{ action: recovering ? '可补仓' : '建议补仓', meaning: '回撤极深+RSI超卖，但估值偏高需谨慎' }};
+    if (valCls === 'good') return {{ action: recovering ? '建议补仓' : '强烈补仓', meaning: '三指标共振，历史级底部机会' }};
+    return {{ action: recovering ? '建议补仓' : '强烈补仓', meaning: '回撤极深+RSI超卖，历史性底部区域' }};
+  }}
+  if (valCls === 'bad') return {{ action: recovering ? '关注' : '可补仓', meaning: '回撤极深但估值偏高，谨慎关注' }};
+  return {{ action: recovering ? '可补仓' : '建议补仓', meaning: '回撤极深+估值低位，择机补仓' }};
+}}
+
+function rsiBadgeClass(signal) {{
+  return {{ '极度超卖':'rsi-extreme', '超卖':'rsi-oversold', '偏弱':'rsi-weak', '中性':'rsi-neutral', '超买':'rsi-overbought', 'N/A':'rsi-na' }}[signal] || 'rsi-neutral';
+}}
+function levelBadgeClass(level) {{
+  return {{ '极限3级':'level-extreme-3', '极限2级':'level-extreme-2', '极限1级':'level-extreme-1', '倍投5级':'level-5', '倍投4级':'level-4', '倍投3级':'level-3', '倍投2级':'level-2', '倍投1级':'level-1', '观望区':'level-1', '停止区':'level-1' }}[level] || 'level-1';
+}}
+function actionColors(action) {{
+  return {{ '强烈补仓':['#1B5E20','#C6EFCE'], '建议补仓':['#2E7D32','#C6EFCE'], '可补仓':['#E65100','#FFEB9C'], '关注':['#5D6D7E','#D9E2EC'], '观望':['#7F8C8D','#D9D9D9'], '暂不操作':['#95A5A6','#D9D9D9'], '警惕回调':['#C62828','#FFC7CE'], '考虑止盈':['#8B0000','#FFE0B2'] }}[action] || ['#333','#f0f0f0'];
+}}
+
+// 核心：基于实时估值重算盘中临时指标，不写回Excel或确认JSON。
+function updateCell(fd, data, snapshotFund, regimeParams) {{
   if (!data || data.gszzl === undefined || data.gszzl === null || data.gszzl === '') return;
   var gszzl = parseFloat(data.gszzl);  // 实时涨跌幅（百分比）
   var row = fd.row;
@@ -999,8 +1109,9 @@ function updateCell(fd, data) {{
 
   if (fd.nav <= 0) return;
 
-  // 2. G列-峰值回撤（实时重算）= (Peak - EstNAV) / Peak
-  var estNav = fd.nav * (1 + gszzl / 100);
+  // 2. G列-峰值回撤（实时重算）= (Peak - EstNAV) / Peak。
+  // 与 Python 同步使用 4 位净值精度和 1 位回撤精度，避免阈值边界出现分歧。
+  var estNav = roundTo(fd.nav * (1 + gszzl / 100), 4);
   var newDD = 0;
   if (fd.peak > 0) {{
     newDD = (fd.peak - estNav) / fd.peak * 100;
@@ -1012,7 +1123,37 @@ function updateCell(fd, data) {{
     }}
   }}
 
-  // 3. Q列-近期总涨跌幅：直接用实时估算净值对锚点计算，避免把两段百分比直接相加。
+  // 3. H/I/L/M：用与确认净值脚本相同的规则临时重算，不改变 Excel 静态底稿。
+  var liveInputs = snapshotFund || {{}};
+  var confirmedNavs = liveInputs.confirmed_navs_desc || fd.confirmed_navs_desc || [];
+  var liveRsi = calcRsiWithToday(confirmedNavs, estNav, 14);
+  var liveRsiSignal = getRsiSignal(liveRsi);
+  var roundedDD = roundTo(newDD, 1);
+  var liveLevel = getLiveLevel(roundedDD);
+  var liveTrend = isFinite(liveInputs.trend_20d_pct) ? liveInputs.trend_20d_pct : fd.trend_20d_pct;
+  var liveValSignal = liveInputs.val_signal || fd.val_signal;
+  var liveAdvice = getLiveAdvice(roundedDD, liveRsi, liveValSignal, liveTrend, regimeParams);
+  var rsiCell = row.querySelector('.live-rsi');
+  if (rsiCell) {{
+    rsiCell.innerHTML = '<div class="rsi-cell-wrap"><span class="pct ' + (liveRsi < 30 ? 'down' : (liveRsi > 70 ? 'up' : 'flat')) + ' live-est">'
+      + (liveRsi === null ? '—' : liveRsi.toFixed(1)) + '</span><div class="rsi-sig-inline"><span class="rsi-badge ' + rsiBadgeClass(liveRsiSignal) + '">' + liveRsiSignal + '</span></div></div>';
+    rsiCell.setAttribute('data-live', '1');
+  }}
+  var actionCell = row.querySelector('.live-action');
+  if (actionCell) {{
+    var actionStyle = actionColors(liveAdvice.action);
+    actionCell.innerHTML = '<span class="action-badge" style="color:' + actionStyle[0] + ';background:' + actionStyle[1] + ';">' + liveAdvice.action + '</span>';
+    actionCell.title = liveAdvice.meaning + (liveTrend > 0 ? '；20日反弹中' : '；20日下跌/横盘');
+    actionCell.setAttribute('data-live', '1');
+  }}
+  var levelCell = row.querySelector('.live-level');
+  if (levelCell) {{
+    var levelMultText = liveLevel.multiplier === 0 ? '0倍' : (liveLevel.multiplier % 1 === 0 ? liveLevel.multiplier.toFixed(0) : liveLevel.multiplier.toFixed(1)) + '倍';
+    levelCell.innerHTML = '<span class="level-badge ' + levelBadgeClass(liveLevel.name) + '">' + liveLevel.name + '</span> <span class="mult-val">' + levelMultText + '</span>';
+    levelCell.setAttribute('data-live', '1');
+  }}
+
+  // 4. Q列-近期总涨跌幅：直接用实时估算净值对锚点计算，避免把两段百分比直接相加。
   var qVal = 0;
   if (fd.anchor > 0) {{
     qVal = (estNav - fd.anchor) / fd.anchor * 100;
@@ -1026,7 +1167,7 @@ function updateCell(fd, data) {{
 
   // 4. R列-补仓份数：qVal 已是百分数（如 -2.35），按整百分点向下取整，信号有效时最低 1 份。
   var shares = 0;
-  if (BUY_SIGNALS.indexOf(fd.action) >= 0) {{
+  if (BUY_SIGNALS.indexOf(liveAdvice.action) >= 0) {{
     shares = Math.max(Math.floor(-qVal), 1);
   }}
   var sharesCell = row.querySelector('.live-shares');
@@ -1038,8 +1179,8 @@ function updateCell(fd, data) {{
     sharesCell.setAttribute('data-r', shares);
   }}
 
-  // 5. T列-补仓倍数（实时重算）= N * R
-  var finalMult = fd.grade_mult * shares;
+  // 5. T列-补仓倍数（实时重算）= 当前实时等级倍数 * R。
+  var finalMult = liveLevel.multiplier * shares;
   var multCell = row.querySelector('.live-mult');
   if (multCell) {{
     multCell.innerHTML = finalMult > 0
@@ -1073,6 +1214,8 @@ function updateCell(fd, data) {{
   fd._live = true;
   fd._shares = shares;
   fd._amount = amount;
+  fd._live_action = liveAdvice.action;
+  fd._live_rsi = liveRsi;
 }}
 
 // 更新顶部汇总统计
@@ -1096,8 +1239,10 @@ async function updateAllFunds() {{
   liveSnapshotPromise = null;
   var snapshot = await loadLiveSnapshot();
   var estimates = snapshot && snapshot.estimates ? snapshot.estimates : {{}};
+  var liveFunds = snapshot && snapshot.funds ? snapshot.funds : {{}};
+  var regimeParams = snapshot && snapshot.market_regime ? snapshot.market_regime.params : null;
   for (var i = 0; i < funds.length; i++) {{
-    updateCell(funds[i], estimates[funds[i].code] || null);
+    updateCell(funds[i], estimates[funds[i].code] || null, liveFunds[funds[i].code] || null, regimeParams);
   }}
   updateSseIndex(snapshot);
   updateSummary();
@@ -1136,7 +1281,8 @@ function resetCell(fd) {{
   var row = fd.row;
   var cells = fd.staticCells || {{}};
   var mapping = [
-    ['.live-change', 'change'], ['.live-dd', 'dd'], ['.live-q', 'q'],
+    ['.live-change', 'change'], ['.live-dd', 'dd'], ['.live-rsi', 'rsi'],
+    ['.live-action', 'action'], ['.live-level', 'level'], ['.live-q', 'q'],
     ['.live-shares', 'shares'], ['.live-mult', 'mult'], ['.live-amount', 'amount'], ['.live-x', 'x']
   ];
   mapping.forEach(function(item) {{

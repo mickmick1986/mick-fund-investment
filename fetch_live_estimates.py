@@ -64,6 +64,22 @@ def fetch_one(session: requests.Session, code: str) -> dict | None:
     }
 
 
+def build_live_fund_inputs(data: dict) -> dict[str, dict]:
+    """Publish only the deterministic inputs required for browser-side intraday recomputation."""
+    funds: dict[str, dict] = {}
+    for item in data.get("funds", []):
+        code = str(item.get("code", "")).zfill(6)
+        if not code or not item.get("latest_nav"):
+            continue
+        funds[code] = {
+            "confirmed_navs_desc": item.get("confirmed_navs_desc", []),
+            "val_signal": item.get("val_signal", ""),
+            "trend_20d_pct": item.get("trend_20d_pct"),
+            "tp_display": item.get("tp_display"),
+        }
+    return funds
+
+
 def main() -> int:
     data = json.loads(SOURCE_PATH.read_text(encoding="utf-8"))
     codes = [str(item["code"]).zfill(6) for item in data.get("funds", [])]
@@ -90,12 +106,22 @@ def main() -> int:
         sse_index = None
 
     now = datetime.now(ZoneInfo("Asia/Shanghai"))
+    regime = data.get("market_regime", {})
+    regime_params = data.get("market_regime_params") or {
+        "rsi_tp_strong": 999 if regime.get("regime_key") == "correction" else 75,
+        "rsi_tp_val": 999 if regime.get("regime_key") == "correction" else 70,
+    }
     snapshot = {
         "trade_date": now.strftime("%Y-%m-%d"),
         "updated_at": now.strftime("%Y-%m-%d %H:%M:%S"),
         "source": "Sina fund estimate",
         "estimate_count": len(estimates),
         "estimates": estimates,
+        "funds": build_live_fund_inputs(data),
+        "market_regime": {
+            "regime_key": regime.get("regime_key"),
+            "params": regime_params,
+        },
         "sse_index": sse_index,
     }
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)

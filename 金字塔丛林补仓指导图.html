@@ -346,9 +346,17 @@ function initFunds() {
       grade_mult: parseFloat(row.getAttribute('data-n')) || 0,
       unit_price: parseFloat(row.getAttribute('data-s')) || 0,
       level: row.getAttribute('data-level') || '',
+      confirmed_navs_desc: (function() {
+        try { return JSON.parse(row.getAttribute('data-navs') || '[]'); } catch (e) { return []; }
+      })(),
+      val_signal: row.getAttribute('data-val-signal') || '',
+      trend_20d_pct: parseFloat(row.getAttribute('data-trend20')),
       staticCells: {
         change: (row.querySelector('.live-change') || {}).innerHTML || '',
         dd: (row.querySelector('.live-dd') || {}).innerHTML || '',
+        rsi: (row.querySelector('.live-rsi') || {}).innerHTML || '',
+        action: (row.querySelector('.live-action') || {}).innerHTML || '',
+        level: (row.querySelector('.live-level') || {}).innerHTML || '',
         q: (row.querySelector('.live-q') || {}).innerHTML || '',
         shares: (row.querySelector('.live-shares') || {}).innerHTML || '',
         mult: (row.querySelector('.live-mult') || {}).innerHTML || '',
@@ -398,8 +406,105 @@ function updateSseIndex(snapshot) {
     + '% ' + changeSign + Number(sse.change).toFixed(2) + ')</span>';
 }
 
-// 核心：基于实时估值重算单行全部指标
-function updateCell(fd, data) {
+function roundTo(value, decimals) {
+  var factor = Math.pow(10, decimals);
+  return Math.round((value + Number.EPSILON) * factor) / factor;
+}
+
+function getRsiSignal(rsi) {
+  if (!isFinite(rsi)) return 'N/A';
+  if (rsi < 20) return '极度超卖';
+  if (rsi < 30) return '超卖';
+  if (rsi < 45) return '偏弱';
+  if (rsi <= 70) return '中性';
+  return '超买';
+}
+
+function calcRsiWithToday(confirmedNavsDesc, estimatedNav, period) {
+  period = period || 14;
+  var navs = [estimatedNav].concat(confirmedNavsDesc || []).slice(0, period + 1);
+  if (navs.length < period + 1) return null;
+  var gains = 0, losses = 0;
+  for (var i = 0; i < period; i++) {
+    var change = navs[i] - navs[i + 1];
+    if (change > 0) gains += change;
+    if (change < 0) losses -= change;
+  }
+  if (losses === 0) return 100;
+  return roundTo(100 - 100 / (1 + (gains / period) / (losses / period)), 1);
+}
+
+function getLiveLevel(drawdownPct) {
+  var levels = [
+    ['停止区', 0, 13, 0], ['观望区', 13, 15, 0.5], ['倍投1级', 15, 20, 1],
+    ['倍投2级', 20, 25, 1.5], ['倍投3级', 25, 33, 2], ['倍投4级', 33, 40, 3],
+    ['倍投5级', 40, 48, 4], ['极限1级', 48, 55, 5], ['极限2级', 55, 65, 6],
+    ['极限3级', 65, Infinity, 7]
+  ];
+  for (var i = 0; i < levels.length; i++) {
+    if (drawdownPct >= levels[i][1] && drawdownPct < levels[i][2]) {
+      return { name: levels[i][0], multiplier: levels[i][3] };
+    }
+  }
+  return { name: '极限3级', multiplier: 7 };
+}
+
+function valuationClass(valSignal) {
+  var value = String(valSignal || '');
+  if (value.indexOf('偏低') >= 0 || value.indexOf('低估') >= 0 || value.indexOf('跌破净值') >= 0 || value.indexOf('适中') >= 0) return 'good';
+  if (value.indexOf('偏高') >= 0 || value.indexOf('高估') >= 0) return 'bad';
+  return 'na';
+}
+
+function getLiveAdvice(drawdownPct, rsi, valSignal, trend20dPct, regimeParams) {
+  var valCls = valuationClass(valSignal);
+  var recovering = isFinite(trend20dPct) && trend20dPct > 0;
+  var strong = regimeParams && isFinite(regimeParams.rsi_tp_strong) ? regimeParams.rsi_tp_strong : 75;
+  var valThreshold = regimeParams && isFinite(regimeParams.rsi_tp_val) ? regimeParams.rsi_tp_val : 70;
+  var oversold = isFinite(rsi) && rsi < 30;
+  var overbought = isFinite(rsi) && rsi > valThreshold;
+  if (isFinite(rsi) && rsi > strong) return { action: '考虑止盈', meaning: 'RSI超高位，考虑分批止盈' };
+  if (isFinite(rsi) && rsi > valThreshold && valCls === 'bad') return { action: '考虑止盈', meaning: '估值偏高+RSI超买，考虑止盈' };
+  if (drawdownPct < 13) return { action: '暂不操作', meaning: '趋势完好，无需补仓' };
+  if (drawdownPct < 15) return { action: '暂不操作', meaning: '接近警戒线，可关注等待' };
+  if (drawdownPct < 20) return { action: oversold ? '观望' : '观望', meaning: oversold ? '回撤尚浅，等跌幅加深' : '信号不充分，持续观察' };
+  if (drawdownPct < 33) {
+    if (overbought) return { action: '警惕回调', meaning: '价格已反弹，不宜追高' };
+    if (oversold) return { action: recovering ? '关注' : '可补仓', meaning: '回撤达标+RSI超卖，择机补仓' };
+    return { action: '关注', meaning: '回撤达标但RSI未超卖，等待' };
+  }
+  if (drawdownPct < 55) {
+    if (overbought) return { action: '警惕回调', meaning: '深跌后已反弹，不宜追高' };
+    if (oversold) {
+      if (valCls === 'bad') return { action: recovering ? '关注' : '可补仓', meaning: '回撤深+RSI超卖，但估值偏高需谨慎' };
+      if (valCls === 'good') return { action: recovering ? '建议补仓' : '强烈补仓', meaning: '三指标共振，强烈建议补仓' };
+      return { action: recovering ? '可补仓' : '建议补仓', meaning: '回撤深+RSI超卖' };
+    }
+    if (valCls === 'bad') return { action: '关注', meaning: '回撤深但估值高+RSI中性，等待确认' };
+    return { action: recovering ? '关注' : '可补仓', meaning: '回撤深但RSI未超卖，择机补仓' };
+  }
+  if (overbought) return { action: '警惕回调', meaning: '深跌后已大幅反弹，不宜追高' };
+  if (oversold) {
+    if (valCls === 'bad') return { action: recovering ? '可补仓' : '建议补仓', meaning: '回撤极深+RSI超卖，但估值偏高需谨慎' };
+    if (valCls === 'good') return { action: recovering ? '建议补仓' : '强烈补仓', meaning: '三指标共振，历史级底部机会' };
+    return { action: recovering ? '建议补仓' : '强烈补仓', meaning: '回撤极深+RSI超卖，历史性底部区域' };
+  }
+  if (valCls === 'bad') return { action: recovering ? '关注' : '可补仓', meaning: '回撤极深但估值偏高，谨慎关注' };
+  return { action: recovering ? '可补仓' : '建议补仓', meaning: '回撤极深+估值低位，择机补仓' };
+}
+
+function rsiBadgeClass(signal) {
+  return { '极度超卖':'rsi-extreme', '超卖':'rsi-oversold', '偏弱':'rsi-weak', '中性':'rsi-neutral', '超买':'rsi-overbought', 'N/A':'rsi-na' }[signal] || 'rsi-neutral';
+}
+function levelBadgeClass(level) {
+  return { '极限3级':'level-extreme-3', '极限2级':'level-extreme-2', '极限1级':'level-extreme-1', '倍投5级':'level-5', '倍投4级':'level-4', '倍投3级':'level-3', '倍投2级':'level-2', '倍投1级':'level-1', '观望区':'level-1', '停止区':'level-1' }[level] || 'level-1';
+}
+function actionColors(action) {
+  return { '强烈补仓':['#1B5E20','#C6EFCE'], '建议补仓':['#2E7D32','#C6EFCE'], '可补仓':['#E65100','#FFEB9C'], '关注':['#5D6D7E','#D9E2EC'], '观望':['#7F8C8D','#D9D9D9'], '暂不操作':['#95A5A6','#D9D9D9'], '警惕回调':['#C62828','#FFC7CE'], '考虑止盈':['#8B0000','#FFE0B2'] }[action] || ['#333','#f0f0f0'];
+}
+
+// 核心：基于实时估值重算盘中临时指标，不写回Excel或确认JSON。
+function updateCell(fd, data, snapshotFund, regimeParams) {
   if (!data || data.gszzl === undefined || data.gszzl === null || data.gszzl === '') return;
   var gszzl = parseFloat(data.gszzl);  // 实时涨跌幅（百分比）
   var row = fd.row;
@@ -415,8 +520,9 @@ function updateCell(fd, data) {
 
   if (fd.nav <= 0) return;
 
-  // 2. G列-峰值回撤（实时重算）= (Peak - EstNAV) / Peak
-  var estNav = fd.nav * (1 + gszzl / 100);
+  // 2. G列-峰值回撤（实时重算）= (Peak - EstNAV) / Peak。
+  // 与 Python 同步使用 4 位净值精度和 1 位回撤精度，避免阈值边界出现分歧。
+  var estNav = roundTo(fd.nav * (1 + gszzl / 100), 4);
   var newDD = 0;
   if (fd.peak > 0) {
     newDD = (fd.peak - estNav) / fd.peak * 100;
@@ -428,7 +534,37 @@ function updateCell(fd, data) {
     }
   }
 
-  // 3. Q列-近期总涨跌幅：直接用实时估算净值对锚点计算，避免把两段百分比直接相加。
+  // 3. H/I/L/M：用与确认净值脚本相同的规则临时重算，不改变 Excel 静态底稿。
+  var liveInputs = snapshotFund || {};
+  var confirmedNavs = liveInputs.confirmed_navs_desc || fd.confirmed_navs_desc || [];
+  var liveRsi = calcRsiWithToday(confirmedNavs, estNav, 14);
+  var liveRsiSignal = getRsiSignal(liveRsi);
+  var roundedDD = roundTo(newDD, 1);
+  var liveLevel = getLiveLevel(roundedDD);
+  var liveTrend = isFinite(liveInputs.trend_20d_pct) ? liveInputs.trend_20d_pct : fd.trend_20d_pct;
+  var liveValSignal = liveInputs.val_signal || fd.val_signal;
+  var liveAdvice = getLiveAdvice(roundedDD, liveRsi, liveValSignal, liveTrend, regimeParams);
+  var rsiCell = row.querySelector('.live-rsi');
+  if (rsiCell) {
+    rsiCell.innerHTML = '<div class="rsi-cell-wrap"><span class="pct ' + (liveRsi < 30 ? 'down' : (liveRsi > 70 ? 'up' : 'flat')) + ' live-est">'
+      + (liveRsi === null ? '—' : liveRsi.toFixed(1)) + '</span><div class="rsi-sig-inline"><span class="rsi-badge ' + rsiBadgeClass(liveRsiSignal) + '">' + liveRsiSignal + '</span></div></div>';
+    rsiCell.setAttribute('data-live', '1');
+  }
+  var actionCell = row.querySelector('.live-action');
+  if (actionCell) {
+    var actionStyle = actionColors(liveAdvice.action);
+    actionCell.innerHTML = '<span class="action-badge" style="color:' + actionStyle[0] + ';background:' + actionStyle[1] + ';">' + liveAdvice.action + '</span>';
+    actionCell.title = liveAdvice.meaning + (liveTrend > 0 ? '；20日反弹中' : '；20日下跌/横盘');
+    actionCell.setAttribute('data-live', '1');
+  }
+  var levelCell = row.querySelector('.live-level');
+  if (levelCell) {
+    var levelMultText = liveLevel.multiplier === 0 ? '0倍' : (liveLevel.multiplier % 1 === 0 ? liveLevel.multiplier.toFixed(0) : liveLevel.multiplier.toFixed(1)) + '倍';
+    levelCell.innerHTML = '<span class="level-badge ' + levelBadgeClass(liveLevel.name) + '">' + liveLevel.name + '</span> <span class="mult-val">' + levelMultText + '</span>';
+    levelCell.setAttribute('data-live', '1');
+  }
+
+  // 4. Q列-近期总涨跌幅：直接用实时估算净值对锚点计算，避免把两段百分比直接相加。
   var qVal = 0;
   if (fd.anchor > 0) {
     qVal = (estNav - fd.anchor) / fd.anchor * 100;
@@ -442,7 +578,7 @@ function updateCell(fd, data) {
 
   // 4. R列-补仓份数：qVal 已是百分数（如 -2.35），按整百分点向下取整，信号有效时最低 1 份。
   var shares = 0;
-  if (BUY_SIGNALS.indexOf(fd.action) >= 0) {
+  if (BUY_SIGNALS.indexOf(liveAdvice.action) >= 0) {
     shares = Math.max(Math.floor(-qVal), 1);
   }
   var sharesCell = row.querySelector('.live-shares');
@@ -454,8 +590,8 @@ function updateCell(fd, data) {
     sharesCell.setAttribute('data-r', shares);
   }
 
-  // 5. T列-补仓倍数（实时重算）= N * R
-  var finalMult = fd.grade_mult * shares;
+  // 5. T列-补仓倍数（实时重算）= 当前实时等级倍数 * R。
+  var finalMult = liveLevel.multiplier * shares;
   var multCell = row.querySelector('.live-mult');
   if (multCell) {
     multCell.innerHTML = finalMult > 0
@@ -489,6 +625,8 @@ function updateCell(fd, data) {
   fd._live = true;
   fd._shares = shares;
   fd._amount = amount;
+  fd._live_action = liveAdvice.action;
+  fd._live_rsi = liveRsi;
 }
 
 // 更新顶部汇总统计
@@ -512,8 +650,10 @@ async function updateAllFunds() {
   liveSnapshotPromise = null;
   var snapshot = await loadLiveSnapshot();
   var estimates = snapshot && snapshot.estimates ? snapshot.estimates : {};
+  var liveFunds = snapshot && snapshot.funds ? snapshot.funds : {};
+  var regimeParams = snapshot && snapshot.market_regime ? snapshot.market_regime.params : null;
   for (var i = 0; i < funds.length; i++) {
-    updateCell(funds[i], estimates[funds[i].code] || null);
+    updateCell(funds[i], estimates[funds[i].code] || null, liveFunds[funds[i].code] || null, regimeParams);
   }
   updateSseIndex(snapshot);
   updateSummary();
@@ -552,7 +692,8 @@ function resetCell(fd) {
   var row = fd.row;
   var cells = fd.staticCells || {};
   var mapping = [
-    ['.live-change', 'change'], ['.live-dd', 'dd'], ['.live-q', 'q'],
+    ['.live-change', 'change'], ['.live-dd', 'dd'], ['.live-rsi', 'rsi'],
+    ['.live-action', 'action'], ['.live-level', 'level'], ['.live-q', 'q'],
     ['.live-shares', 'shares'], ['.live-mult', 'mult'], ['.live-amount', 'amount'], ['.live-x', 'x']
   ];
   mapping.forEach(function(item) {
@@ -633,17 +774,17 @@ document.addEventListener('DOMContentLoaded', function() {
   <div>
     <span class="main-title">【2026-08-03补仓指导】</span>
     <span style="font-size:11px;opacity:0.7;margin-left:12px;"><span id="live-status" style="margin-right:8px;">⏳盘后</span>⏱ <span id="refresh-timer">60</span>秒后刷新</span>
-    <span class="stats">25只基金 -- 需补仓<span class="highlight">11</span>只 -- 共<span class="highlight">147</span>份 -- ¥<span class="highlight">6,315</span></span>
+    <span class="stats">25只基金 -- 需补仓<span class="highlight">8</span>只 -- 共<span class="highlight">161</span>份 -- ¥<span class="highlight">6,740</span></span>
   </div>
-  <div style="font-size:12px;opacity:0.85;">数据更新: 2026-08-03 09:55:42</div>
+  <div style="font-size:12px;opacity:0.85;">数据更新: 2026-08-03 16:18:04</div>
 </div>
 
 <div class="market-bar">
   <div class="m-item"><span class="m-label">市场状态</span><span class="m-val">调整期</span></div>
-<div class="m-item"><span class="m-label">上证指数</span><span class="m-val" id="live-sse">3832<span class="m-change up">(较前日+0.72% +27.57)</span></span></div>
+<div class="m-item"><span class="m-label">上证指数</span><span class="m-val" id="live-sse">3810<span class="m-change down">(较前日-0.59% -22.60)</span></span></div>
 <div class="m-item"><span class="m-label">200日线</span><span class="m-val">4013</span></div>
-<div class="m-item"><span class="m-label">上证RSI</span><span class="m-val">43.1</span></div>
-<div class="m-item"><span class="m-label">峰值回撤</span><span class="m-val" style="color:#E74C3C">-9.7%</span></div>
+<div class="m-item"><span class="m-label">上证RSI</span><span class="m-val">35.8</span></div>
+<div class="m-item"><span class="m-label">峰值回撤</span><span class="m-val" style="color:#27AE60">-10.2%</span></div>
 <div class="m-item"><span class="m-label">恐贪指数(07-31)</span><span class="m-val"><span class="fg-extreme-fear" style="color:#1E3F1F; font-weight:700;">10</span> <span class="fg-badge fg-extreme-fear">极度恐惧</span></span></div>
 <div class="m-item"><span class="m-label">北向(07-31)</span><span class="m-val"><span class="m-change up">+0.06亿</span></span></div>
 <div class="m-item"><span class="m-label">南向(07-31)</span><span class="m-val"><span class="m-change down">-0.05亿</span></span></div>
@@ -702,12 +843,12 @@ document.addEventListener('DOMContentLoaded', function() {
   </tr>
 </thead>
 <tbody>
-<tr class="row-watch" data-code="000218" data-d="4.4715" data-e="3.1961" data-o="3.8354" data-w="3.1391" data-action="关注" data-n="2" data-s="10" data-level="倍投3级">
+<tr class="row-watch" data-code="000218" data-d="4.4715" data-e="3.1961" data-o="3.8354" data-w="3.1391" data-action="关注" data-n="2" data-s="10" data-level="倍投3级" data-navs='[3.1961, 3.1807, 3.1844, 3.1896, 3.2279, 3.1908, 3.2359, 3.2465, 3.2024, 3.1529, 3.1509, 3.1694, 3.1725, 3.1777, 3.2024, 3.2415, 3.2452, 3.2556, 3.2607, 3.2798, 3.2904]' data-val-signal="商品基金无PE/PB估值" data-trend20="-2.87">
             <td class="col-cat">黄金</td>
             <td class="col-code">000218</td>
             <td class="col-name">国泰黄金ETF联接A</td>
             <td class="col-dd down"><span class="live-dd"><span class="pct down">-28.52%</span></span></td>
-            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+            <td class="col-rsi live-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
         <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
@@ -726,10 +867,10 @@ document.addEventListener('DOMContentLoaded', function() {
         <!-- 最后一个点 -->
         <circle cx="86.0" cy="17.3" r="1.8" fill="#4a90d9" stroke="#fff" stroke-width="0.5"/>
       </svg>
-    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-weak">偏弱</span></div></div></td>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-neutral">中性</span></div></div></td>
             <td class="col-val"><span class="text-gray small">商品基金无PE/PB估值</span></td>
-            <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
-            <td class="col-level-combined"><span class="level-badge level-3">倍投3级</span> <span class="mult-val">2倍</span></td>
+            <td class="col-action live-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
+            <td class="col-level-combined live-level"><span class="level-badge level-3">倍投3级</span> <span class="mult-val">2倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct flat">已确认</span></span></td>
             <td class="col-q"><span class="live-q"><span class="pct down">-16.67%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
@@ -741,12 +882,12 @@ document.addEventListener('DOMContentLoaded', function() {
             <td class="col-x"><span class="live-x"><span class="pct up">+1.82%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
-<tr class="" data-code="024194" data-d="1.9691" data-e="1.1865" data-o="1.1459" data-w="1.1804" data-action="建议补仓" data-n="3" data-s="10" data-level="倍投4级">
+<tr class="" data-code="024194" data-d="1.9691" data-e="1.1865" data-o="1.1459" data-w="1.1804" data-action="建议补仓" data-n="3" data-s="10" data-level="倍投4级" data-navs='[1.1865, 1.1459, 1.2006, 1.1902, 1.2352, 1.1935, 1.2386, 1.2256, 1.2479, 1.1804, 1.2318, 1.3383, 1.3876, 1.4354, 1.5122, 1.6485, 1.5798, 1.5129, 1.5509, 1.5983, 1.6654]' data-val-signal="指数PE/PB数据暂缺" data-trend20="-28.76">
             <td class="col-cat">商业航天</td>
             <td class="col-code">024194</td>
             <td class="col-name">永赢国证商用卫星通信产业ETF联接A</td>
             <td class="col-dd down"><span class="live-dd"><span class="pct down">-39.74%</span></span></td>
-            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+            <td class="col-rsi live-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
         <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
@@ -767,8 +908,8 @@ document.addEventListener('DOMContentLoaded', function() {
       </svg>
     </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-oversold">超卖</span></div></div></td>
             <td class="col-val"><span class="text-gray small">指数PE/PB数据暂缺</span></td>
-            <td class="col-action"><span class="action-badge" style="color:#2E7D32;background:#C8E6C9;">建议补仓</span></td>
-            <td class="col-level-combined"><span class="level-badge level-4">倍投4级</span> <span class="mult-val">3倍</span></td>
+            <td class="col-action live-action"><span class="action-badge" style="color:#2E7D32;background:#C8E6C9;">建议补仓</span></td>
+            <td class="col-level-combined live-level"><span class="level-badge level-4">倍投4级</span> <span class="mult-val">3倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct flat">已确认</span></span></td>
             <td class="col-q"><span class="live-q"><span class="pct up">+3.54%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">1</span></span></td>
@@ -780,12 +921,12 @@ document.addEventListener('DOMContentLoaded', function() {
             <td class="col-x"><span class="live-x"><span class="pct up">+0.52%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
-<tr class="" data-code="024202" data-d="1.8609" data-e="1.2555" data-o="1.2337" data-w="1.2472" data-action="可补仓" data-n="2" data-s="10" data-level="倍投3级">
+<tr class="row-watch" data-code="024202" data-d="1.8609" data-e="1.2555" data-o="1.2337" data-w="1.2472" data-action="关注" data-n="2" data-s="10" data-level="倍投3级" data-navs='[1.2555, 1.2337, 1.2725, 1.2664, 1.3045, 1.2556, 1.2854, 1.2653, 1.2824, 1.2472, 1.2998, 1.3749, 1.4111, 1.4407, 1.4134, 1.5102, 1.5201, 1.486, 1.5607, 1.6164, 1.6819]' data-val-signal="主动基金无指数估值" data-trend20="-25.35">
             <td class="col-cat">超导/核聚变</td>
             <td class="col-code">024202</td>
             <td class="col-name">永赢制造升级智选混合A</td>
             <td class="col-dd down"><span class="live-dd"><span class="pct down">-32.53%</span></span></td>
-            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+            <td class="col-rsi live-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
         <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
@@ -800,31 +941,31 @@ document.addEventListener('DOMContentLoaded', function() {
         <!-- 参考线 70 -->
         <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
         <!-- RSI曲线 -->
-        <polyline points="4.0,11.0 6.7,11.1 9.5,10.9 12.2,10.0 14.9,8.0 17.7,12.6 20.4,11.7 23.1,11.8 25.9,12.2 28.6,15.1 31.3,15.2 34.1,18.1 36.8,21.5 39.5,23.6 42.3,23.9 45.0,24.7 47.7,25.3 50.5,25.1 53.2,25.8 55.9,25.6 58.7,25.8 61.4,27.6 64.1,26.3 66.9,26.0 69.6,25.2 72.3,24.9 75.1,22.7 77.8,22.2 80.5,23.2 83.3,23.5 86.0,21.3" fill="none" stroke="#27ae60" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <polyline points="4.0,11.0 6.7,11.1 9.5,10.9 12.2,10.0 14.9,8.0 17.7,12.6 20.4,11.7 23.1,11.8 25.9,12.2 28.6,15.1 31.3,15.2 34.1,18.1 36.8,21.5 39.5,23.6 42.3,23.9 45.0,24.7 47.7,25.3 50.5,25.1 53.2,25.8 55.9,25.6 58.7,25.8 61.4,27.6 64.1,26.3 66.9,26.0 69.6,25.2 72.3,24.9 75.1,22.7 77.8,22.2 80.5,23.2 83.3,23.5 86.0,21.3" fill="none" stroke="#4a90d9" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
         <!-- 最后一个点 -->
-        <circle cx="86.0" cy="21.3" r="1.8" fill="#27ae60" stroke="#fff" stroke-width="0.5"/>
+        <circle cx="86.0" cy="21.3" r="1.8" fill="#4a90d9" stroke="#fff" stroke-width="0.5"/>
       </svg>
-    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-extreme">极度超卖</span></div></div></td>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-weak">偏弱</span></div></div></td>
             <td class="col-val"><span class="text-gray small">主动基金无指数估值</span></td>
-            <td class="col-action"><span class="action-badge" style="color:#E65100;background:#FFEB9C;">可补仓</span></td>
-            <td class="col-level-combined"><span class="level-badge level-3">倍投3级</span> <span class="mult-val">2倍</span></td>
+            <td class="col-action live-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
+            <td class="col-level-combined live-level"><span class="level-badge level-3">倍投3级</span> <span class="mult-val">2倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct flat">已确认</span></span></td>
             <td class="col-q"><span class="live-q"><span class="pct up">+1.77%</span></span></td>
-            <td class="col-shares"><span class="live-shares"><span class="shares-val">1</span></span></td>
+            <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
             <td class="col-price">10</td>
-            <td class="col-final-mult"><span class="live-mult"><span class="guide-mult">2</span></span></td>
-            <td class="col-amount"><span class="live-amount"><span class="amt-val">¥20</span></span></td>
+            <td class="col-final-mult"><span class="live-mult"><span class="text-gray">0</span></span></td>
+            <td class="col-amount"><span class="live-amount"><span class="text-gray">¥0</span></span></td>
             <td class="col-date">2026-07-20</td>
             <td class="col-nav">1.2472</td>
             <td class="col-x"><span class="live-x"><span class="pct up">+0.67%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
-<tr class="" data-code="001475" data-d="2.378" data-e="2.002" data-o="2.378" data-w="1.955" data-action="观望" data-n="1" data-s="10" data-level="倍投1级">
+<tr class="" data-code="001475" data-d="2.378" data-e="2.002" data-o="2.378" data-w="1.955" data-action="观望" data-n="1" data-s="10" data-level="倍投1级" data-navs='[2.002, 1.95, 2.034, 2.0, 2.111, 2.069, 2.084, 2.089, 2.098, 1.955, 1.962, 2.082, 2.141, 2.206, 2.192, 2.297, 2.375, 2.318, 2.338, 2.365, 2.337]' data-val-signal="PB=3.21 适中" data-trend20="-14.33">
             <td class="col-cat">军工</td>
             <td class="col-code">001475</td>
             <td class="col-name">易方达国防军工混合A</td>
             <td class="col-dd down"><span class="live-dd"><span class="pct down">-15.81%</span></span></td>
-            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+            <td class="col-rsi live-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
         <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
@@ -839,14 +980,14 @@ document.addEventListener('DOMContentLoaded', function() {
         <!-- 参考线 70 -->
         <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
         <!-- RSI曲线 -->
-        <polyline points="4.0,17.3 6.7,16.6 9.5,15.8 12.2,13.6 14.9,9.7 17.7,11.4 20.4,7.6 23.1,7.4 25.9,6.8 28.6,9.8 31.3,9.6 34.1,9.8 36.8,10.8 39.5,12.6 42.3,12.2 45.0,15.4 47.7,17.2 50.5,17.9 53.2,19.5 55.9,20.0 58.7,22.6 61.4,25.0 64.1,21.4 66.9,20.7 69.6,21.5 72.3,22.3 75.1,21.0 77.8,22.0 80.5,22.5 83.3,22.5 86.0,20.2" fill="none" stroke="#27ae60" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <polyline points="4.0,17.3 6.7,16.6 9.5,15.8 12.2,13.6 14.9,9.7 17.7,11.4 20.4,7.6 23.1,7.4 25.9,6.8 28.6,9.8 31.3,9.6 34.1,9.8 36.8,10.8 39.5,12.6 42.3,12.2 45.0,15.4 47.7,17.2 50.5,17.9 53.2,19.5 55.9,20.0 58.7,22.6 61.4,25.0 64.1,21.4 66.9,20.7 69.6,21.5 72.3,22.3 75.1,21.0 77.8,22.0 80.5,22.5 83.3,22.5 86.0,20.2" fill="none" stroke="#4a90d9" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
         <!-- 最后一个点 -->
-        <circle cx="86.0" cy="20.2" r="1.8" fill="#27ae60" stroke="#fff" stroke-width="0.5"/>
+        <circle cx="86.0" cy="20.2" r="1.8" fill="#4a90d9" stroke="#fff" stroke-width="0.5"/>
       </svg>
-    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-oversold">超卖</span></div></div></td>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-weak">偏弱</span></div></div></td>
             <td class="col-val">PB=3.2<br><span class="text-orange small">适中</span></td>
-            <td class="col-action"><span class="action-badge" style="color:#7F8C8D;background:#EAEDED;">观望</span></td>
-            <td class="col-level-combined"><span class="level-badge level-1">倍投1级</span> <span class="mult-val">1倍</span></td>
+            <td class="col-action live-action"><span class="action-badge" style="color:#7F8C8D;background:#EAEDED;">观望</span></td>
+            <td class="col-level-combined live-level"><span class="level-badge level-1">倍投1级</span> <span class="mult-val">1倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct flat">已确认</span></span></td>
             <td class="col-q"><span class="live-q"><span class="pct down">-15.81%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
@@ -858,12 +999,12 @@ document.addEventListener('DOMContentLoaded', function() {
             <td class="col-x"><span class="live-x"><span class="pct up">+2.40%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
-<tr class="row-watch" data-code="013477" data-d="1.3333" data-e="0.8514" data-o="0.8226" data-w="0.7707" data-action="关注" data-n="3" data-s="10" data-level="倍投4级">
+<tr class="row-watch" data-code="013477" data-d="1.3333" data-e="0.8514" data-o="0.8226" data-w="0.7707" data-action="关注" data-n="3" data-s="10" data-level="倍投4级" data-navs='[0.8514, 0.8222, 0.815, 0.794, 0.7894, 0.7707, 0.8087, 0.8079, 0.8226, 0.7991, 0.784, 0.8075, 0.8039, 0.7899, 0.7935, 0.8235, 0.8239, 0.8111, 0.8092, 0.8357, 0.8511]' data-val-signal="PE=33.5 适中" data-trend20="0.04">
             <td class="col-cat">互金/金融IT</td>
             <td class="col-code">013477</td>
             <td class="col-name">华宝中证金融科技主题ETF联接A</td>
             <td class="col-dd down"><span class="live-dd"><span class="pct down">-36.14%</span></span></td>
-            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+            <td class="col-rsi live-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
         <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
@@ -882,10 +1023,10 @@ document.addEventListener('DOMContentLoaded', function() {
         <!-- 最后一个点 -->
         <circle cx="86.0" cy="13.5" r="1.8" fill="#4a90d9" stroke="#fff" stroke-width="0.5"/>
       </svg>
-    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-weak">偏弱</span></div></div></td>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-neutral">中性</span></div></div></td>
             <td class="col-val">PE=33.5<br><span class="text-orange small">适中</span></td>
-            <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
-            <td class="col-level-combined"><span class="level-badge level-4">倍投4级</span> <span class="mult-val">3倍</span></td>
+            <td class="col-action live-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
+            <td class="col-level-combined live-level"><span class="level-badge level-4">倍投4级</span> <span class="mult-val">3倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct flat">已确认</span></span></td>
             <td class="col-q"><span class="live-q"><span class="pct up">+3.50%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
@@ -897,12 +1038,12 @@ document.addEventListener('DOMContentLoaded', function() {
             <td class="col-x"><span class="live-x"><span class="pct up">+10.47%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
-<tr class="" data-code="005453" data-d="3.4821" data-e="1.1263" data-o="1.2217" data-w="0.9073" data-action="可补仓" data-n="7" data-s="10" data-level="极限3级">
+<tr class="" data-code="005453" data-d="3.4821" data-e="1.1263" data-o="1.2217" data-w="0.9073" data-action="建议补仓" data-n="7" data-s="10" data-level="极限3级" data-navs='[1.1263, 1.1056, 1.1378, 1.1367, 1.1635, 1.146, 1.1726, 1.1654, 1.1643, 1.1443, 1.1008, 1.1919, 1.2217, 1.1557, 1.1162, 1.1313, 1.1009, 1.0848, 1.1101, 1.1572, 1.1478]' data-val-signal="PE=33.5 适中" data-trend20="-1.87">
             <td class="col-cat">A股+港股(医药均衡)</td>
             <td class="col-code">005453</td>
             <td class="col-name">前海开源医疗健康混合A</td>
             <td class="col-dd down"><span class="live-dd"><span class="pct down">-67.65%</span></span></td>
-            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+            <td class="col-rsi live-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
         <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
@@ -922,9 +1063,9 @@ document.addEventListener('DOMContentLoaded', function() {
         <circle cx="86.0" cy="16.7" r="1.8" fill="#4a90d9" stroke="#fff" stroke-width="0.5"/>
       </svg>
     </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-neutral">中性</span></div></div></td>
-            <td class="col-val">PE=33.6<br><span class="text-orange small">适中</span></td>
-            <td class="col-action"><span class="action-badge" style="color:#E65100;background:#FFEB9C;">可补仓</span></td>
-            <td class="col-level-combined"><span class="level-badge level-extreme-3">极限3级</span> <span class="mult-val">7倍</span></td>
+            <td class="col-val">PE=33.5<br><span class="text-orange small">适中</span></td>
+            <td class="col-action live-action"><span class="action-badge" style="color:#2E7D32;background:#C8E6C9;">建议补仓</span></td>
+            <td class="col-level-combined live-level"><span class="level-badge level-extreme-3">极限3级</span> <span class="mult-val">7倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct flat">已确认</span></span></td>
             <td class="col-q"><span class="live-q"><span class="pct down">-7.81%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">7</span></span></td>
@@ -936,12 +1077,12 @@ document.addEventListener('DOMContentLoaded', function() {
             <td class="col-x"><span class="live-x"><span class="pct up">+24.14%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
-<tr class="row-watch" data-code="008928" data-d="1.9384" data-e="1.3905" data-o="1.3443" data-w="1.2482" data-action="关注" data-n="2" data-s="10" data-level="倍投3级">
+<tr class="row-watch" data-code="008928" data-d="1.9384" data-e="1.3905" data-o="1.3443" data-w="1.2482" data-action="关注" data-n="2" data-s="10" data-level="倍投3级" data-navs='[1.3905, 1.3875, 1.3703, 1.3335, 1.3118, 1.2964, 1.3294, 1.3286, 1.3286, 1.3443, 1.3206, 1.3423, 1.3393, 1.3055, 1.2968, 1.297, 1.2754, 1.2958, 1.2907, 1.3137, 1.3045]' data-val-signal="PE=21.1 适中" data-trend20="6.59">
             <td class="col-cat">消费</td>
             <td class="col-code">008928</td>
             <td class="col-name">泰达宏利中证主要消费红利指数A</td>
             <td class="col-dd down"><span class="live-dd"><span class="pct down">-28.27%</span></span></td>
-            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+            <td class="col-rsi live-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
         <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
@@ -962,8 +1103,8 @@ document.addEventListener('DOMContentLoaded', function() {
       </svg>
     </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-neutral">中性</span></div></div></td>
             <td class="col-val">PE=21.1<br><span class="text-orange small">适中</span></td>
-            <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
-            <td class="col-level-combined"><span class="level-badge level-3">倍投3级</span> <span class="mult-val">2倍</span></td>
+            <td class="col-action live-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
+            <td class="col-level-combined live-level"><span class="level-badge level-3">倍投3级</span> <span class="mult-val">2倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct flat">已确认</span></span></td>
             <td class="col-q"><span class="live-q"><span class="pct up">+3.44%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
@@ -975,12 +1116,12 @@ document.addEventListener('DOMContentLoaded', function() {
             <td class="col-x"><span class="live-x"><span class="pct up">+11.40%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
-<tr class="" data-code="003095" data-d="4.31" data-e="1.8994" data-o="2.1116" data-w="1.4955" data-action="建议补仓" data-n="6" data-s="10" data-level="极限2级">
+<tr class="" data-code="003095" data-d="4.31" data-e="1.8994" data-o="2.1116" data-w="1.4955" data-action="建议补仓" data-n="6" data-s="10" data-level="极限2级" data-navs='[1.8994, 1.8781, 1.9312, 1.9193, 1.9735, 1.9425, 2.0267, 2.0271, 2.0313, 1.9971, 1.926, 2.0856, 2.1116, 2.002, 1.9278, 1.9514, 1.8973, 1.8455, 1.892, 1.9753, 1.9854]' data-val-signal="PE=29.8 适中" data-trend20="-4.33">
             <td class="col-cat">CXO+创新药</td>
             <td class="col-code">003095</td>
             <td class="col-name">中欧医疗健康混合A</td>
             <td class="col-dd down"><span class="live-dd"><span class="pct down">-55.93%</span></span></td>
-            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+            <td class="col-rsi live-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
         <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
@@ -1001,8 +1142,8 @@ document.addEventListener('DOMContentLoaded', function() {
       </svg>
     </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-neutral">中性</span></div></div></td>
             <td class="col-val">PE=29.8<br><span class="text-orange small">适中</span></td>
-            <td class="col-action"><span class="action-badge" style="color:#2E7D32;background:#C8E6C9;">建议补仓</span></td>
-            <td class="col-level-combined"><span class="level-badge level-extreme-2">极限2级</span> <span class="mult-val">6倍</span></td>
+            <td class="col-action live-action"><span class="action-badge" style="color:#2E7D32;background:#C8E6C9;">建议补仓</span></td>
+            <td class="col-level-combined live-level"><span class="level-badge level-extreme-2">极限2级</span> <span class="mult-val">6倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct flat">已确认</span></span></td>
             <td class="col-q"><span class="live-q"><span class="pct down">-10.05%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">10</span></span></td>
@@ -1014,12 +1155,12 @@ document.addEventListener('DOMContentLoaded', function() {
             <td class="col-x"><span class="live-x"><span class="pct up">+27.01%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
-<tr class="" data-code="011102" data-d="1.5245" data-e="0.7017" data-o="0.7234" data-w="0.6782" data-action="可补仓" data-n="5" data-s="10" data-level="极限1级">
+<tr class="row-watch" data-code="011102" data-d="1.5245" data-e="0.7017" data-o="0.7234" data-w="0.6782" data-action="关注" data-n="5" data-s="10" data-level="极限1级" data-navs='[0.7017, 0.6912, 0.7018, 0.6985, 0.7154, 0.6991, 0.7234, 0.7059, 0.7029, 0.6782, 0.6855, 0.7116, 0.7307, 0.7353, 0.731, 0.7699, 0.7832, 0.77, 0.7941, 0.8023, 0.8193]' data-val-signal="PB=3.71 高估" data-trend20="-14.35">
             <td class="col-cat">光伏</td>
             <td class="col-code">011102</td>
             <td class="col-name">天弘中证光伏产业指数A</td>
             <td class="col-dd down"><span class="live-dd"><span class="pct down">-53.97%</span></span></td>
-            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+            <td class="col-rsi live-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
         <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
@@ -1034,31 +1175,31 @@ document.addEventListener('DOMContentLoaded', function() {
         <!-- 参考线 70 -->
         <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
         <!-- RSI曲线 -->
-        <polyline points="4.0,12.4 6.7,12.1 9.5,13.4 12.2,12.7 14.9,11.4 17.7,18.9 20.4,15.4 23.1,15.2 25.9,15.7 28.6,18.2 31.3,18.7 34.1,20.8 36.8,22.3 39.5,22.9 42.3,21.6 45.0,23.7 47.7,23.7 50.5,23.4 53.2,24.2 55.9,24.6 58.7,25.7 61.4,28.2 64.1,25.7 66.9,24.6 69.6,22.6 72.3,22.9 75.1,21.3 77.8,21.1 80.5,21.8 83.3,21.7 86.0,19.0" fill="none" stroke="#27ae60" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <polyline points="4.0,12.4 6.7,12.1 9.5,13.4 12.2,12.7 14.9,11.4 17.7,18.9 20.4,15.4 23.1,15.2 25.9,15.7 28.6,18.2 31.3,18.7 34.1,20.8 36.8,22.3 39.5,22.9 42.3,21.6 45.0,23.7 47.7,23.7 50.5,23.4 53.2,24.2 55.9,24.6 58.7,25.7 61.4,28.2 64.1,25.7 66.9,24.6 69.6,22.6 72.3,22.9 75.1,21.3 77.8,21.1 80.5,21.8 83.3,21.7 86.0,19.0" fill="none" stroke="#4a90d9" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
         <!-- 最后一个点 -->
-        <circle cx="86.0" cy="19.0" r="1.8" fill="#27ae60" stroke="#fff" stroke-width="0.5"/>
+        <circle cx="86.0" cy="19.0" r="1.8" fill="#4a90d9" stroke="#fff" stroke-width="0.5"/>
       </svg>
-    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-oversold">超卖</span></div></div></td>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-weak">偏弱</span></div></div></td>
             <td class="col-val">PB=3.7<br><span class="text-red small">高估</span></td>
-            <td class="col-action"><span class="action-badge" style="color:#E65100;background:#FFEB9C;">可补仓</span></td>
-            <td class="col-level-combined"><span class="level-badge level-extreme-1">极限1级</span> <span class="mult-val">5倍</span></td>
+            <td class="col-action live-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
+            <td class="col-level-combined live-level"><span class="level-badge level-extreme-1">极限1级</span> <span class="mult-val">5倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct flat">已确认</span></span></td>
             <td class="col-q"><span class="live-q"><span class="pct down">-3.00%</span></span></td>
-            <td class="col-shares"><span class="live-shares"><span class="shares-val">2</span></span></td>
+            <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
             <td class="col-price">10</td>
-            <td class="col-final-mult"><span class="live-mult"><span class="guide-mult">10</span></span></td>
-            <td class="col-amount"><span class="live-amount"><span class="amt-val">¥100</span></span></td>
+            <td class="col-final-mult"><span class="live-mult"><span class="text-gray">0</span></span></td>
+            <td class="col-amount"><span class="live-amount"><span class="text-gray">¥0</span></span></td>
             <td class="col-date">2026-07-20</td>
             <td class="col-nav">0.6782</td>
             <td class="col-x"><span class="live-x"><span class="pct up">+3.47%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
-<tr class="" data-code="003984" data-d="3.8813" data-e="2.361" data-o="2.3907" data-w="2.2003" data-action="建议补仓" data-n="3" data-s="10" data-level="倍投4级">
+<tr class="" data-code="003984" data-d="3.8813" data-e="2.361" data-o="2.3907" data-w="2.2003" data-action="可补仓" data-n="3" data-s="10" data-level="倍投4级" data-navs='[2.361, 2.3654, 2.3831, 2.3399, 2.391, 2.3226, 2.3907, 2.2667, 2.282, 2.2003, 2.2606, 2.3173, 2.3654, 2.3854, 2.339, 2.4222, 2.5226, 2.5773, 2.7516, 2.7578, 2.8006]' data-val-signal="PE=34.5 适中" data-trend20="-15.7">
             <td class="col-cat">锂电</td>
             <td class="col-code">003984</td>
             <td class="col-name">嘉实新能源新材料股票A</td>
             <td class="col-dd down"><span class="live-dd"><span class="pct down">-39.17%</span></span></td>
-            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+            <td class="col-rsi live-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
         <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
@@ -1073,14 +1214,14 @@ document.addEventListener('DOMContentLoaded', function() {
         <!-- 参考线 70 -->
         <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
         <!-- RSI曲线 -->
-        <polyline points="4.0,11.2 6.7,10.7 9.5,12.3 12.2,11.2 14.9,11.2 17.7,17.7 20.4,16.0 23.1,16.3 25.9,15.4 28.6,16.4 31.3,17.8 34.1,18.7 36.8,19.4 39.5,21.2 42.3,21.2 45.0,24.1 47.7,23.8 50.5,24.7 53.2,24.5 55.9,23.5 58.7,24.9 61.4,27.3 64.1,26.0 66.9,25.9 69.6,22.8 72.3,23.0 75.1,21.7 77.8,20.5 80.5,19.1 83.3,17.9 86.0,16.6" fill="none" stroke="#27ae60" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <polyline points="4.0,11.2 6.7,10.7 9.5,12.3 12.2,11.2 14.9,11.2 17.7,17.7 20.4,16.0 23.1,16.3 25.9,15.4 28.6,16.4 31.3,17.8 34.1,18.7 36.8,19.4 39.5,21.2 42.3,21.2 45.0,24.1 47.7,23.8 50.5,24.7 53.2,24.5 55.9,23.5 58.7,24.9 61.4,27.3 64.1,26.0 66.9,25.9 69.6,22.8 72.3,23.0 75.1,21.7 77.8,20.5 80.5,19.1 83.3,17.9 86.0,16.6" fill="none" stroke="#4a90d9" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
         <!-- 最后一个点 -->
-        <circle cx="86.0" cy="16.6" r="1.8" fill="#27ae60" stroke="#fff" stroke-width="0.5"/>
+        <circle cx="86.0" cy="16.6" r="1.8" fill="#4a90d9" stroke="#fff" stroke-width="0.5"/>
       </svg>
-    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-oversold">超卖</span></div></div></td>
-            <td class="col-val">PE=34.4<br><span class="text-orange small">适中</span></td>
-            <td class="col-action"><span class="action-badge" style="color:#2E7D32;background:#C8E6C9;">建议补仓</span></td>
-            <td class="col-level-combined"><span class="level-badge level-4">倍投4级</span> <span class="mult-val">3倍</span></td>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-neutral">中性</span></div></div></td>
+            <td class="col-val">PE=34.5<br><span class="text-orange small">适中</span></td>
+            <td class="col-action live-action"><span class="action-badge" style="color:#E65100;background:#FFEB9C;">可补仓</span></td>
+            <td class="col-level-combined live-level"><span class="level-badge level-4">倍投4级</span> <span class="mult-val">3倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct flat">已确认</span></span></td>
             <td class="col-q"><span class="live-q"><span class="pct down">-1.24%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">1</span></span></td>
@@ -1092,12 +1233,12 @@ document.addEventListener('DOMContentLoaded', function() {
             <td class="col-x"><span class="live-x"><span class="pct up">+7.30%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
-<tr class="row-watch" data-code="010769" data-d="1.1129" data-e="0.7404" data-o="0.7339" data-w="0.6665" data-action="关注" data-n="3" data-s="10" data-level="倍投4级">
+<tr class="row-watch" data-code="010769" data-d="1.1129" data-e="0.7404" data-o="0.7339" data-w="0.6665" data-action="关注" data-n="3" data-s="10" data-level="倍投4级" data-navs='[0.7404, 0.7413, 0.7308, 0.7251, 0.7231, 0.7127, 0.7339, 0.7252, 0.717, 0.7222, 0.7114, 0.7237, 0.7156, 0.6998, 0.6959, 0.6981, 0.6894, 0.6936, 0.712, 0.7226, 0.7032]' data-val-signal="PE=32.0 偏高" data-trend20="5.29">
             <td class="col-cat">农业(种植养殖)</td>
             <td class="col-code">010769</td>
             <td class="col-name">天弘中证农业主题ETF联接A</td>
             <td class="col-dd down"><span class="live-dd"><span class="pct down">-33.47%</span></span></td>
-            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+            <td class="col-rsi live-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
         <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
@@ -1117,9 +1258,9 @@ document.addEventListener('DOMContentLoaded', function() {
         <circle cx="86.0" cy="12.3" r="1.8" fill="#4a90d9" stroke="#fff" stroke-width="0.5"/>
       </svg>
     </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-neutral">中性</span></div></div></td>
-            <td class="col-val">PE=32.1<br><span class="text-red small">偏高</span></td>
-            <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
-            <td class="col-level-combined"><span class="level-badge level-4">倍投4级</span> <span class="mult-val">3倍</span></td>
+            <td class="col-val">PE=32.0<br><span class="text-red small">偏高</span></td>
+            <td class="col-action live-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
+            <td class="col-level-combined live-level"><span class="level-badge level-4">倍投4级</span> <span class="mult-val">3倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct flat">已确认</span></span></td>
             <td class="col-q"><span class="live-q"><span class="pct up">+0.89%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
@@ -1131,12 +1272,12 @@ document.addEventListener('DOMContentLoaded', function() {
             <td class="col-x"><span class="live-x"><span class="pct up">+11.09%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
-<tr class="" data-code="025832" data-d="1.5577" data-e="1.1133" data-o="1.0965" data-w="1.0944" data-action="可补仓" data-n="2" data-s="10" data-level="倍投3级">
+<tr class="row-watch" data-code="025832" data-d="1.5577" data-e="1.1133" data-o="1.0965" data-w="1.0944" data-action="关注" data-n="2" data-s="10" data-level="倍投3级" data-navs='[1.1133, 1.0965, 1.1237, 1.1076, 1.1542, 1.1182, 1.1575, 1.1056, 1.1292, 1.0944, 1.0946, 1.143, 1.1859, 1.2134, 1.1885, 1.2482, 1.2636, 1.2488, 1.2923, 1.3341, 1.3564]' data-val-signal="PE=28.0 适中" data-trend20="-17.92">
             <td class="col-cat">电力设备</td>
             <td class="col-code">025832</td>
             <td class="col-name">天弘中证电网设备主题指数A</td>
             <td class="col-dd down"><span class="live-dd"><span class="pct down">-28.53%</span></span></td>
-            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+            <td class="col-rsi live-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
         <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
@@ -1151,31 +1292,31 @@ document.addEventListener('DOMContentLoaded', function() {
         <!-- 参考线 70 -->
         <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
         <!-- RSI曲线 -->
-        <polyline points="4.0,11.6 6.7,11.2 9.5,11.6 12.2,10.6 14.9,9.1 17.7,16.5 20.4,15.9 23.1,16.9 25.9,17.0 28.6,17.9 31.3,17.8 34.1,19.8 36.8,22.5 39.5,23.4 42.3,23.1 45.0,26.3 47.7,26.5 50.5,25.3 53.2,26.4 55.9,26.1 58.7,26.3 61.4,27.3 64.1,25.1 66.9,24.8 69.6,22.7 72.3,23.0 75.1,20.9 77.8,21.0 80.5,20.9 83.3,21.1 86.0,19.2" fill="none" stroke="#27ae60" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <polyline points="4.0,11.6 6.7,11.2 9.5,11.6 12.2,10.6 14.9,9.1 17.7,16.5 20.4,15.9 23.1,16.9 25.9,17.0 28.6,17.9 31.3,17.8 34.1,19.8 36.8,22.5 39.5,23.4 42.3,23.1 45.0,26.3 47.7,26.5 50.5,25.3 53.2,26.4 55.9,26.1 58.7,26.3 61.4,27.3 64.1,25.1 66.9,24.8 69.6,22.7 72.3,23.0 75.1,20.9 77.8,21.0 80.5,20.9 83.3,21.1 86.0,19.2" fill="none" stroke="#4a90d9" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
         <!-- 最后一个点 -->
-        <circle cx="86.0" cy="19.2" r="1.8" fill="#27ae60" stroke="#fff" stroke-width="0.5"/>
+        <circle cx="86.0" cy="19.2" r="1.8" fill="#4a90d9" stroke="#fff" stroke-width="0.5"/>
       </svg>
-    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-oversold">超卖</span></div></div></td>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-weak">偏弱</span></div></div></td>
             <td class="col-val">PE=28.0<br><span class="text-orange small">适中</span></td>
-            <td class="col-action"><span class="action-badge" style="color:#E65100;background:#FFEB9C;">可补仓</span></td>
-            <td class="col-level-combined"><span class="level-badge level-3">倍投3级</span> <span class="mult-val">2倍</span></td>
+            <td class="col-action live-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
+            <td class="col-level-combined live-level"><span class="level-badge level-3">倍投3级</span> <span class="mult-val">2倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct flat">已确认</span></span></td>
             <td class="col-q"><span class="live-q"><span class="pct up">+1.53%</span></span></td>
-            <td class="col-shares"><span class="live-shares"><span class="shares-val">1</span></span></td>
+            <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
             <td class="col-price">10</td>
-            <td class="col-final-mult"><span class="live-mult"><span class="guide-mult">2</span></span></td>
-            <td class="col-amount"><span class="live-amount"><span class="amt-val">¥20</span></span></td>
+            <td class="col-final-mult"><span class="live-mult"><span class="text-gray">0</span></span></td>
+            <td class="col-amount"><span class="live-amount"><span class="text-gray">¥0</span></span></td>
             <td class="col-date">2026-07-20</td>
             <td class="col-nav">1.0944</td>
             <td class="col-x"><span class="live-x"><span class="pct up">+1.73%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
-<tr class="row-watch" data-code="004432" data-d="2.5089" data-e="1.7764" data-o="1.6299" data-w="1.6299" data-action="关注" data-n="2" data-s="10" data-level="倍投3级">
+<tr class="row-watch" data-code="004432" data-d="2.5089" data-e="1.7764" data-o="1.6299" data-w="1.6299" data-action="关注" data-n="2" data-s="10" data-level="倍投3级" data-navs='[1.7764, 1.7418, 1.7545, 1.7269, 1.7606, 1.7227, 1.8058, 1.752, 1.6988, 1.6299, 1.6308, 1.7085, 1.7242, 1.7587, 1.6708, 1.7409, 1.7322, 1.7408, 1.7891, 1.8423, 1.8679]' data-val-signal="PE=19.0 适中[PB首选不可用]" data-trend20="-4.9">
             <td class="col-cat">有色金属</td>
             <td class="col-code">004432</td>
             <td class="col-name">南方有色金属ETF联接A</td>
             <td class="col-dd down"><span class="live-dd"><span class="pct down">-29.20%</span></span></td>
-            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+            <td class="col-rsi live-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
         <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
@@ -1194,10 +1335,10 @@ document.addEventListener('DOMContentLoaded', function() {
         <!-- 最后一个点 -->
         <circle cx="86.0" cy="14.8" r="1.8" fill="#4a90d9" stroke="#fff" stroke-width="0.5"/>
       </svg>
-    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-weak">偏弱</span></div></div></td>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-neutral">中性</span></div></div></td>
             <td class="col-val">PE=19.0<br><span class="text-red small">适中[PB首选不可用]</span></td>
-            <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
-            <td class="col-level-combined"><span class="level-badge level-3">倍投3级</span> <span class="mult-val">2倍</span></td>
+            <td class="col-action live-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
+            <td class="col-level-combined live-level"><span class="level-badge level-3">倍投3级</span> <span class="mult-val">2倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct flat">已确认</span></span></td>
             <td class="col-q"><span class="live-q"><span class="pct up">+8.99%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
@@ -1209,12 +1350,12 @@ document.addEventListener('DOMContentLoaded', function() {
             <td class="col-x"><span class="live-x"><span class="pct up">+8.99%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
-<tr class="row-watch" data-code="008887" data-d="2.8703" data-e="1.9414" data-o="2.8703" data-w="2.0675" data-action="关注" data-n="2" data-s="10" data-level="倍投3级">
+<tr class="" data-code="008887" data-d="2.8703" data-e="1.9414" data-o="2.8703" data-w="2.0675" data-action="可补仓" data-n="2" data-s="10" data-level="倍投3级" data-navs='[1.9414, 1.8909, 1.9937, 2.0407, 2.2024, 2.1927, 2.1747, 2.2645, 2.2958, 2.0675, 2.1202, 2.2771, 2.4072, 2.5341, 2.4912, 2.5911, 2.7649, 2.5352, 2.5544, 2.566, 2.5474]' data-val-signal="PE=87.1 偏高" data-trend20="-23.79">
             <td class="col-cat">半导体</td>
             <td class="col-code">008887</td>
             <td class="col-name">华夏国证半导体芯片ETF</td>
             <td class="col-dd down"><span class="live-dd"><span class="pct down">-32.36%</span></span></td>
-            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+            <td class="col-rsi live-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
         <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
@@ -1229,31 +1370,31 @@ document.addEventListener('DOMContentLoaded', function() {
         <!-- 参考线 70 -->
         <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
         <!-- RSI曲线 -->
-        <polyline points="4.0,18.0 6.7,17.5 9.5,16.6 12.2,13.5 14.9,9.8 17.7,9.4 20.4,7.1 23.1,7.2 25.9,8.0 28.6,12.0 31.3,12.1 34.1,12.7 36.8,13.0 39.5,14.3 42.3,13.2 45.0,16.0 47.7,16.5 50.5,17.3 53.2,19.9 55.9,20.7 58.7,23.3 61.4,24.5 64.1,21.3 66.9,20.0 69.6,20.4 72.3,20.4 75.1,20.2 77.8,21.1 80.5,24.3 83.3,24.0 86.0,22.7" fill="none" stroke="#4a90d9" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <polyline points="4.0,18.0 6.7,17.5 9.5,16.6 12.2,13.5 14.9,9.8 17.7,9.4 20.4,7.1 23.1,7.2 25.9,8.0 28.6,12.0 31.3,12.1 34.1,12.7 36.8,13.0 39.5,14.3 42.3,13.2 45.0,16.0 47.7,16.5 50.5,17.3 53.2,19.9 55.9,20.7 58.7,23.3 61.4,24.5 64.1,21.3 66.9,20.0 69.6,20.4 72.3,20.4 75.1,20.2 77.8,21.1 80.5,24.3 83.3,24.0 86.0,22.7" fill="none" stroke="#27ae60" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
         <!-- 最后一个点 -->
-        <circle cx="86.0" cy="22.7" r="1.8" fill="#4a90d9" stroke="#fff" stroke-width="0.5"/>
+        <circle cx="86.0" cy="22.7" r="1.8" fill="#27ae60" stroke="#fff" stroke-width="0.5"/>
       </svg>
-    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-weak">偏弱</span></div></div></td>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-oversold">超卖</span></div></div></td>
             <td class="col-val">PE=87.1<br><span class="text-red small">偏高</span></td>
-            <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
-            <td class="col-level-combined"><span class="level-badge level-3">倍投3级</span> <span class="mult-val">2倍</span></td>
+            <td class="col-action live-action"><span class="action-badge" style="color:#E65100;background:#FFEB9C;">可补仓</span></td>
+            <td class="col-level-combined live-level"><span class="level-badge level-3">倍投3级</span> <span class="mult-val">2倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct flat">已确认</span></span></td>
             <td class="col-q"><span class="live-q"><span class="pct down">-32.36%</span></span></td>
-            <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
+            <td class="col-shares"><span class="live-shares"><span class="shares-val">32</span></span></td>
             <td class="col-price">10</td>
-            <td class="col-final-mult"><span class="live-mult"><span class="text-gray">0</span></span></td>
-            <td class="col-amount"><span class="live-amount"><span class="text-gray">¥0</span></span></td>
+            <td class="col-final-mult"><span class="live-mult"><span class="guide-mult">64</span></span></td>
+            <td class="col-amount"><span class="live-amount"><span class="amt-val">¥640</span></span></td>
             <td class="col-date">2026-07-20</td>
             <td class="col-nav">2.0675</td>
             <td class="col-x"><span class="live-x"><span class="pct down">-6.10%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
-<tr class="" data-code="018344" data-d="1.4532" data-e="1.1632" data-o="1.4532" data-w="1.1254" data-action="可补仓" data-n="1.5" data-s="10" data-level="倍投2级">
+<tr class="row-watch" data-code="018344" data-d="1.4532" data-e="1.1632" data-o="1.4532" data-w="1.1254" data-action="关注" data-n="1.5" data-s="10" data-level="倍投2级" data-navs='[1.1632, 1.1028, 1.1316, 1.1239, 1.153, 1.1254, 1.1636, 1.1692, 1.1872, 1.1396, 1.1773, 1.247, 1.2663, 1.272, 1.264, 1.3371, 1.3378, 1.3093, 1.3666, 1.3852, 1.4353]' data-val-signal="PE=46.7 偏高" data-trend20="-18.96">
             <td class="col-cat">机器人</td>
             <td class="col-code">018344</td>
             <td class="col-name">华夏中证机器人ETF联接A</td>
             <td class="col-dd down"><span class="live-dd"><span class="pct down">-19.96%</span></span></td>
-            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+            <td class="col-rsi live-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
         <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
@@ -1268,31 +1409,31 @@ document.addEventListener('DOMContentLoaded', function() {
         <!-- 参考线 70 -->
         <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
         <!-- RSI曲线 -->
-        <polyline points="4.0,13.6 6.7,14.3 9.5,14.7 12.2,14.0 14.9,11.9 17.7,19.7 20.4,20.2 23.1,18.1 25.9,16.1 28.6,15.5 31.3,12.7 34.1,15.9 36.8,17.3 39.5,19.0 42.3,19.1 45.0,18.6 47.7,19.9 50.5,20.0 53.2,20.0 55.9,19.3 58.7,20.6 61.4,23.6 64.1,21.9 66.9,21.8 69.6,25.0 72.3,24.9 75.1,23.3 77.8,22.9 80.5,23.9 83.3,24.3 86.0,20.2" fill="none" stroke="#27ae60" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <polyline points="4.0,13.6 6.7,14.3 9.5,14.7 12.2,14.0 14.9,11.9 17.7,19.7 20.4,20.2 23.1,18.1 25.9,16.1 28.6,15.5 31.3,12.7 34.1,15.9 36.8,17.3 39.5,19.0 42.3,19.1 45.0,18.6 47.7,19.9 50.5,20.0 53.2,20.0 55.9,19.3 58.7,20.6 61.4,23.6 64.1,21.9 66.9,21.8 69.6,25.0 72.3,24.9 75.1,23.3 77.8,22.9 80.5,23.9 83.3,24.3 86.0,20.2" fill="none" stroke="#4a90d9" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
         <!-- 最后一个点 -->
-        <circle cx="86.0" cy="20.2" r="1.8" fill="#27ae60" stroke="#fff" stroke-width="0.5"/>
+        <circle cx="86.0" cy="20.2" r="1.8" fill="#4a90d9" stroke="#fff" stroke-width="0.5"/>
       </svg>
-    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-extreme">极度超卖</span></div></div></td>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-weak">偏弱</span></div></div></td>
             <td class="col-val">PE=46.7<br><span class="text-red small">偏高</span></td>
-            <td class="col-action"><span class="action-badge" style="color:#E65100;background:#FFEB9C;">可补仓</span></td>
-            <td class="col-level-combined"><span class="level-badge level-2">倍投2级</span> <span class="mult-val">1.5倍</span></td>
+            <td class="col-action live-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
+            <td class="col-level-combined live-level"><span class="level-badge level-2">倍投2级</span> <span class="mult-val">1.5倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct flat">已确认</span></span></td>
             <td class="col-q"><span class="live-q"><span class="pct down">-19.96%</span></span></td>
-            <td class="col-shares"><span class="live-shares"><span class="shares-val">19</span></span></td>
+            <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
             <td class="col-price">10</td>
-            <td class="col-final-mult"><span class="live-mult"><span class="guide-mult">28.5</span></span></td>
-            <td class="col-amount"><span class="live-amount"><span class="amt-val">¥285</span></span></td>
+            <td class="col-final-mult"><span class="live-mult"><span class="text-gray">0</span></span></td>
+            <td class="col-amount"><span class="live-amount"><span class="text-gray">¥0</span></span></td>
             <td class="col-date">2026-07-24</td>
             <td class="col-nav">1.1254</td>
             <td class="col-x"><span class="live-x"><span class="pct up">+3.36%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
-<tr class="" data-code="001790" data-d="3.449" data-e="2.2299" data-o="2.7582" data-w="2.241" data-action="强烈补仓" data-n="3" data-s="10" data-level="倍投4级">
+<tr class="" data-code="001790" data-d="3.449" data-e="2.2299" data-o="2.7582" data-w="2.241" data-action="可补仓" data-n="3" data-s="10" data-level="倍投4级" data-navs='[2.2299, 2.1717, 2.2349, 2.2232, 2.3323, 2.2615, 2.3194, 2.2856, 2.3349, 2.241, 2.2797, 2.4013, 2.4356, 2.4626, 2.4161, 2.5142, 2.5812, 2.5285, 2.6383, 2.6593, 2.6951]' data-val-signal="PE=27.5 适中" data-trend20="-17.26">
             <td class="col-cat">智能汽车/无人驾驶</td>
             <td class="col-code">001790</td>
             <td class="col-name">国泰智能汽车股票A</td>
             <td class="col-dd down"><span class="live-dd"><span class="pct down">-35.35%</span></span></td>
-            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+            <td class="col-rsi live-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
         <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
@@ -1307,14 +1448,14 @@ document.addEventListener('DOMContentLoaded', function() {
         <!-- 参考线 70 -->
         <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
         <!-- RSI曲线 -->
-        <polyline points="4.0,13.3 6.7,13.9 9.5,14.6 12.2,13.5 14.9,11.3 17.7,16.4 20.4,15.5 23.1,15.2 25.9,13.4 28.6,14.9 31.3,13.3 34.1,15.9 36.8,17.2 39.5,19.7 42.3,19.3 45.0,20.1 47.7,20.4 50.5,20.8 53.2,21.4 55.9,20.8 58.7,21.9 61.4,24.2 64.1,21.9 66.9,21.8 69.6,22.9 72.3,23.1 75.1,21.4 77.8,21.4 80.5,22.2 83.3,22.2 86.0,20.0" fill="none" stroke="#27ae60" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <polyline points="4.0,13.3 6.7,13.9 9.5,14.6 12.2,13.5 14.9,11.3 17.7,16.4 20.4,15.5 23.1,15.2 25.9,13.4 28.6,14.9 31.3,13.3 34.1,15.9 36.8,17.2 39.5,19.7 42.3,19.3 45.0,20.1 47.7,20.4 50.5,20.8 53.2,21.4 55.9,20.8 58.7,21.9 61.4,24.2 64.1,21.9 66.9,21.8 69.6,22.9 72.3,23.1 75.1,21.4 77.8,21.4 80.5,22.2 83.3,22.2 86.0,20.0" fill="none" stroke="#4a90d9" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
         <!-- 最后一个点 -->
-        <circle cx="86.0" cy="20.0" r="1.8" fill="#27ae60" stroke="#fff" stroke-width="0.5"/>
+        <circle cx="86.0" cy="20.0" r="1.8" fill="#4a90d9" stroke="#fff" stroke-width="0.5"/>
       </svg>
-    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-oversold">超卖</span></div></div></td>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-weak">偏弱</span></div></div></td>
             <td class="col-val">PE=27.5<br><span class="text-orange small">适中</span></td>
-            <td class="col-action"><span class="action-badge" style="color:#1B5E20;background:#C8E6C9;">强烈补仓</span></td>
-            <td class="col-level-combined"><span class="level-badge level-4">倍投4级</span> <span class="mult-val">3倍</span></td>
+            <td class="col-action live-action"><span class="action-badge" style="color:#E65100;background:#FFEB9C;">可补仓</span></td>
+            <td class="col-level-combined live-level"><span class="level-badge level-4">倍投4级</span> <span class="mult-val">3倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct flat">已确认</span></span></td>
             <td class="col-q"><span class="live-q"><span class="pct down">-19.15%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">19</span></span></td>
@@ -1326,12 +1467,12 @@ document.addEventListener('DOMContentLoaded', function() {
             <td class="col-x"><span class="live-x"><span class="pct down">-0.50%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
-<tr class="row-watch" data-code="014414" data-d="1.2169" data-e="0.7597" data-o="0.9284" data-w="0.6829" data-action="关注" data-n="3" data-s="10" data-level="倍投4级">
+<tr class="row-watch" data-code="014414" data-d="1.2169" data-e="0.7597" data-o="0.9284" data-w="0.6829" data-action="关注" data-n="3" data-s="10" data-level="倍投4级" data-navs='[0.7597, 0.7546, 0.7477, 0.7423, 0.7429, 0.7342, 0.7553, 0.7511, 0.7501, 0.759, 0.752, 0.7708, 0.7586, 0.743, 0.7422, 0.7435, 0.7316, 0.7343, 0.7519, 0.7595, 0.7341]' data-val-signal="PE=23.2 适中" data-trend20="3.49">
             <td class="col-cat">猪肉</td>
             <td class="col-code">014414</td>
             <td class="col-name">招商中证畜牧养殖ETF联接A</td>
             <td class="col-dd down"><span class="live-dd"><span class="pct down">-37.57%</span></span></td>
-            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+            <td class="col-rsi live-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
         <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
@@ -1350,10 +1491,10 @@ document.addEventListener('DOMContentLoaded', function() {
         <!-- 最后一个点 -->
         <circle cx="86.0" cy="15.1" r="1.8" fill="#4a90d9" stroke="#fff" stroke-width="0.5"/>
       </svg>
-    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-weak">偏弱</span></div></div></td>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-neutral">中性</span></div></div></td>
             <td class="col-val">PE=23.2<br><span class="text-orange small">适中</span></td>
-            <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
-            <td class="col-level-combined"><span class="level-badge level-4">倍投4级</span> <span class="mult-val">3倍</span></td>
+            <td class="col-action live-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
+            <td class="col-level-combined live-level"><span class="level-badge level-4">倍投4级</span> <span class="mult-val">3倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct flat">已确认</span></span></td>
             <td class="col-q"><span class="live-q"><span class="pct down">-18.17%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
@@ -1365,12 +1506,12 @@ document.addEventListener('DOMContentLoaded', function() {
             <td class="col-x"><span class="live-x"><span class="pct up">+11.25%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
-<tr class="" data-code="006098" data-d="1.8708" data-e="1.5474" data-o="1.787" data-w="1.4073" data-action="观望" data-n="1" data-s="10" data-level="倍投1级">
+<tr class="" data-code="006098" data-d="1.8708" data-e="1.5474" data-o="1.787" data-w="1.4073" data-action="观望" data-n="1" data-s="10" data-level="倍投1级" data-navs='[1.5474, 1.5497, 1.5494, 1.5254, 1.5459, 1.5404, 1.5768, 1.5591, 1.5674, 1.5652, 1.5343, 1.5561, 1.5802, 1.5444, 1.5389, 1.553, 1.5839, 1.5527, 1.5723, 1.6176, 1.6105]' data-val-signal="PB=1.31 适中" data-trend20="-3.92">
             <td class="col-cat">券商</td>
             <td class="col-code">006098</td>
             <td class="col-name">华宝券商ETF联接A</td>
             <td class="col-dd down"><span class="live-dd"><span class="pct down">-17.29%</span></span></td>
-            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+            <td class="col-rsi live-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
         <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
@@ -1389,10 +1530,10 @@ document.addEventListener('DOMContentLoaded', function() {
         <!-- 最后一个点 -->
         <circle cx="86.0" cy="16.5" r="1.8" fill="#4a90d9" stroke="#fff" stroke-width="0.5"/>
       </svg>
-    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-weak">偏弱</span></div></div></td>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-neutral">中性</span></div></div></td>
             <td class="col-val">PB=1.3<br><span class="text-orange small">适中</span></td>
-            <td class="col-action"><span class="action-badge" style="color:#7F8C8D;background:#EAEDED;">观望</span></td>
-            <td class="col-level-combined"><span class="level-badge level-1">倍投1级</span> <span class="mult-val">1倍</span></td>
+            <td class="col-action live-action"><span class="action-badge" style="color:#7F8C8D;background:#EAEDED;">观望</span></td>
+            <td class="col-level-combined live-level"><span class="level-badge level-1">倍投1级</span> <span class="mult-val">1倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct flat">已确认</span></span></td>
             <td class="col-q"><span class="live-q"><span class="pct down">-13.41%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
@@ -1404,12 +1545,12 @@ document.addEventListener('DOMContentLoaded', function() {
             <td class="col-x"><span class="live-x"><span class="pct up">+9.96%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
-<tr class="row-watch" data-code="011608" data-d="1.6749" data-e="1.2655" data-o="1.6749" data-w="1.3205" data-action="关注" data-n="1.5" data-s="10" data-level="倍投2级">
+<tr class="row-watch" data-code="011608" data-d="1.6749" data-e="1.2655" data-o="1.6749" data-w="1.3205" data-action="关注" data-n="1.5" data-s="10" data-level="倍投2级" data-navs='[1.2655, 1.2305, 1.2965, 1.3065, 1.3899, 1.3735, 1.3752, 1.4261, 1.4571, 1.323, 1.3205, 1.416, 1.4718, 1.5333, 1.5218, 1.5724, 1.6596, 1.5374, 1.5268, 1.5229, 1.5079]' data-val-signal="PE=196.1 高估" data-trend20="-16.08">
             <td class="col-cat">科创50</td>
             <td class="col-code">011608</td>
             <td class="col-name">易方达科创50联接A</td>
             <td class="col-dd down"><span class="live-dd"><span class="pct down">-24.44%</span></span></td>
-            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+            <td class="col-rsi live-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
         <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
@@ -1430,8 +1571,8 @@ document.addEventListener('DOMContentLoaded', function() {
       </svg>
     </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-weak">偏弱</span></div></div></td>
             <td class="col-val">PE=196.1<br><span class="text-red small">高估</span></td>
-            <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
-            <td class="col-level-combined"><span class="level-badge level-2">倍投2级</span> <span class="mult-val">1.5倍</span></td>
+            <td class="col-action live-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
+            <td class="col-level-combined live-level"><span class="level-badge level-2">倍投2级</span> <span class="mult-val">1.5倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct flat">已确认</span></span></td>
             <td class="col-q"><span class="live-q"><span class="pct down">-24.44%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
@@ -1443,12 +1584,12 @@ document.addEventListener('DOMContentLoaded', function() {
             <td class="col-x"><span class="live-x"><span class="pct down">-4.17%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
-<tr class="row-watch" data-code="003765" data-d="2.3474" data-e="1.8149" data-o="2.3474" data-w="1.859" data-action="关注" data-n="1.5" data-s="10" data-level="倍投2级">
+<tr class="row-watch" data-code="003765" data-d="2.3474" data-e="1.8149" data-o="2.3474" data-w="1.859" data-action="关注" data-n="1.5" data-s="10" data-level="倍投2级" data-navs='[1.8149, 1.7644, 1.8346, 1.8082, 1.9452, 1.8884, 1.9372, 1.9327, 1.9943, 1.8676, 1.859, 1.9948, 2.0521, 2.076, 2.0103, 2.0722, 2.1622, 2.0742, 2.1079, 2.1274, 2.1642]' data-val-signal="PE=42.2 适中" data-trend20="-16.14">
             <td class="col-cat">创业板</td>
             <td class="col-code">003765</td>
             <td class="col-name">广发创业板ETF联接A</td>
             <td class="col-dd down"><span class="live-dd"><span class="pct down">-22.68%</span></span></td>
-            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+            <td class="col-rsi live-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
         <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
@@ -1469,8 +1610,8 @@ document.addEventListener('DOMContentLoaded', function() {
       </svg>
     </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-weak">偏弱</span></div></div></td>
             <td class="col-val">PE=42.2<br><span class="text-orange small">适中</span></td>
-            <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
-            <td class="col-level-combined"><span class="level-badge level-2">倍投2级</span> <span class="mult-val">1.5倍</span></td>
+            <td class="col-action live-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
+            <td class="col-level-combined live-level"><span class="level-badge level-2">倍投2级</span> <span class="mult-val">1.5倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct flat">已确认</span></span></td>
             <td class="col-q"><span class="live-q"><span class="pct down">-22.68%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
@@ -1482,12 +1623,12 @@ document.addEventListener('DOMContentLoaded', function() {
             <td class="col-x"><span class="live-x"><span class="pct down">-2.37%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
-<tr class="" data-code="025656" data-d="1.2999" data-e="0.993" data-o="1.282" data-w="0.9946" data-action="可补仓" data-n="1.5" data-s="10" data-level="倍投2级">
+<tr class="row-watch" data-code="025656" data-d="1.2999" data-e="0.993" data-o="1.282" data-w="0.9946" data-action="关注" data-n="1.5" data-s="10" data-level="倍投2级" data-navs='[0.993, 0.9639, 0.9988, 1.0022, 1.0502, 1.0192, 1.0433, 1.0391, 1.0488, 0.9946, 1.0329, 1.1014, 1.1348, 1.1559, 1.1177, 1.1765, 1.2003, 1.1679, 1.1962, 1.2223, 1.2413]' data-val-signal="PE=35.2 偏高" data-trend20="-20.0">
             <td class="col-cat">量化中小盘</td>
             <td class="col-code">025656</td>
             <td class="col-name">国金智远量化A</td>
             <td class="col-dd down"><span class="live-dd"><span class="pct down">-23.61%</span></span></td>
-            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+            <td class="col-rsi live-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
         <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
@@ -1502,31 +1643,31 @@ document.addEventListener('DOMContentLoaded', function() {
         <!-- 参考线 70 -->
         <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
         <!-- RSI曲线 -->
-        <polyline points="4.0,13.6 6.7,13.7 9.5,13.8 12.2,12.4 14.9,9.4 17.7,15.1 20.4,12.5 23.1,12.7 25.9,11.4 28.6,13.6 31.3,13.8 34.1,16.7 36.8,19.1 39.5,21.2 42.3,19.2 45.0,21.9 47.7,22.8 50.5,21.3 53.2,22.1 55.9,22.0 58.7,23.4 61.4,25.3 64.1,23.0 66.9,22.6 69.6,22.6 72.3,22.7 75.1,21.1 77.8,21.4 80.5,22.7 83.3,22.9 86.0,20.7" fill="none" stroke="#27ae60" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <polyline points="4.0,13.6 6.7,13.7 9.5,13.8 12.2,12.4 14.9,9.4 17.7,15.1 20.4,12.5 23.1,12.7 25.9,11.4 28.6,13.6 31.3,13.8 34.1,16.7 36.8,19.1 39.5,21.2 42.3,19.2 45.0,21.9 47.7,22.8 50.5,21.3 53.2,22.1 55.9,22.0 58.7,23.4 61.4,25.3 64.1,23.0 66.9,22.6 69.6,22.6 72.3,22.7 75.1,21.1 77.8,21.4 80.5,22.7 83.3,22.9 86.0,20.7" fill="none" stroke="#4a90d9" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
         <!-- 最后一个点 -->
-        <circle cx="86.0" cy="20.7" r="1.8" fill="#27ae60" stroke="#fff" stroke-width="0.5"/>
+        <circle cx="86.0" cy="20.7" r="1.8" fill="#4a90d9" stroke="#fff" stroke-width="0.5"/>
       </svg>
-    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-oversold">超卖</span></div></div></td>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-weak">偏弱</span></div></div></td>
             <td class="col-val">PE=35.2<br><span class="text-red small">偏高</span></td>
-            <td class="col-action"><span class="action-badge" style="color:#E65100;background:#FFEB9C;">可补仓</span></td>
-            <td class="col-level-combined"><span class="level-badge level-2">倍投2级</span> <span class="mult-val">1.5倍</span></td>
+            <td class="col-action live-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
+            <td class="col-level-combined live-level"><span class="level-badge level-2">倍投2级</span> <span class="mult-val">1.5倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct flat">已确认</span></span></td>
             <td class="col-q"><span class="live-q"><span class="pct down">-22.54%</span></span></td>
-            <td class="col-shares"><span class="live-shares"><span class="shares-val">22</span></span></td>
+            <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
             <td class="col-price">10</td>
-            <td class="col-final-mult"><span class="live-mult"><span class="guide-mult">33</span></span></td>
-            <td class="col-amount"><span class="live-amount"><span class="amt-val">¥330</span></span></td>
+            <td class="col-final-mult"><span class="live-mult"><span class="text-gray">0</span></span></td>
+            <td class="col-amount"><span class="live-amount"><span class="text-gray">¥0</span></span></td>
             <td class="col-date">2026-07-20</td>
             <td class="col-nav">0.9946</td>
             <td class="col-x"><span class="live-x"><span class="pct down">-0.16%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
-<tr class="row-watch" data-code="025880" data-d="1.9364" data-e="1.1712" data-o="1.9364" data-w="1.3201" data-action="关注" data-n="3" data-s="10" data-level="倍投4级">
+<tr class="row-watch" data-code="025880" data-d="1.9364" data-e="1.1712" data-o="1.9364" data-w="1.3201" data-action="关注" data-n="3" data-s="10" data-level="倍投4级" data-navs='[1.1712, 1.1063, 1.217, 1.2241, 1.3808, 1.3201, 1.3503, 1.3616, 1.4364, 1.3218, 1.3971, 1.5404, 1.5877, 1.617, 1.501, 1.5707, 1.6454, 1.5488, 1.5752, 1.5756, 1.6372]' data-val-signal="PE=14.4 偏高" data-trend20="-28.46">
             <td class="col-cat">CPO</td>
             <td class="col-code">025880</td>
             <td class="col-name">汇添富科技领先混合A</td>
             <td class="col-dd down"><span class="live-dd"><span class="pct down">-39.52%</span></span></td>
-            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+            <td class="col-rsi live-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
         <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
@@ -1547,8 +1688,8 @@ document.addEventListener('DOMContentLoaded', function() {
       </svg>
     </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-weak">偏弱</span></div></div></td>
             <td class="col-val">PE=14.4<br><span class="text-red small">偏高</span></td>
-            <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
-            <td class="col-level-combined"><span class="level-badge level-4">倍投4级</span> <span class="mult-val">3倍</span></td>
+            <td class="col-action live-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
+            <td class="col-level-combined live-level"><span class="level-badge level-4">倍投4级</span> <span class="mult-val">3倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct flat">已确认</span></span></td>
             <td class="col-q"><span class="live-q"><span class="pct down">-39.52%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
@@ -1560,12 +1701,12 @@ document.addEventListener('DOMContentLoaded', function() {
             <td class="col-x"><span class="live-x"><span class="pct down">-11.28%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
-<tr class="row-watch" data-code="021420" data-d="2.6228" data-e="1.9005" data-o="2.6228" data-w="1.9915" data-action="关注" data-n="2" data-s="10" data-level="倍投3级">
+<tr class="" data-code="021420" data-d="2.6228" data-e="1.9005" data-o="2.6228" data-w="1.9915" data-action="可补仓" data-n="2" data-s="10" data-level="倍投3级" data-navs='[1.9005, 1.8338, 1.9012, 1.9438, 2.0683, 2.0576, 2.076, 2.1565, 2.17, 1.9929, 1.9915, 2.1578, 2.2441, 2.346, 2.3269, 2.44, 2.542, 2.3725, 2.3553, 2.409, 2.3745]' data-val-signal="PE=52.0 偏高" data-trend20="-19.96">
             <td class="col-cat">存储芯片</td>
             <td class="col-code">021420</td>
             <td class="col-name">广发信创ETF联接A</td>
             <td class="col-dd down"><span class="live-dd"><span class="pct down">-27.54%</span></span></td>
-            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+            <td class="col-rsi live-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
         <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
@@ -1580,31 +1721,31 @@ document.addEventListener('DOMContentLoaded', function() {
         <!-- 参考线 70 -->
         <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
         <!-- RSI曲线 -->
-        <polyline points="4.0,17.7 6.7,17.0 9.5,16.4 12.2,13.8 14.9,9.1 17.7,10.2 20.4,7.7 23.1,7.8 25.9,9.0 28.6,12.6 31.3,12.5 34.1,13.0 36.8,13.9 39.5,14.8 42.3,13.9 45.0,15.9 47.7,16.5 50.5,17.4 53.2,20.2 55.9,20.7 58.7,23.3 61.4,24.3 64.1,21.1 66.9,19.6 69.6,20.4 72.3,21.1 75.1,20.5 77.8,21.7 80.5,24.9 83.3,24.7 86.0,22.7" fill="none" stroke="#4a90d9" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <polyline points="4.0,17.7 6.7,17.0 9.5,16.4 12.2,13.8 14.9,9.1 17.7,10.2 20.4,7.7 23.1,7.8 25.9,9.0 28.6,12.6 31.3,12.5 34.1,13.0 36.8,13.9 39.5,14.8 42.3,13.9 45.0,15.9 47.7,16.5 50.5,17.4 53.2,20.2 55.9,20.7 58.7,23.3 61.4,24.3 64.1,21.1 66.9,19.6 69.6,20.4 72.3,21.1 75.1,20.5 77.8,21.7 80.5,24.9 83.3,24.7 86.0,22.7" fill="none" stroke="#27ae60" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
         <!-- 最后一个点 -->
-        <circle cx="86.0" cy="22.7" r="1.8" fill="#4a90d9" stroke="#fff" stroke-width="0.5"/>
+        <circle cx="86.0" cy="22.7" r="1.8" fill="#27ae60" stroke="#fff" stroke-width="0.5"/>
       </svg>
-    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-weak">偏弱</span></div></div></td>
-            <td class="col-val">PE=52.5<br><span class="text-red small">偏高</span></td>
-            <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
-            <td class="col-level-combined"><span class="level-badge level-3">倍投3级</span> <span class="mult-val">2倍</span></td>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-oversold">超卖</span></div></div></td>
+            <td class="col-val">PE=52.0<br><span class="text-red small">偏高</span></td>
+            <td class="col-action live-action"><span class="action-badge" style="color:#E65100;background:#FFEB9C;">可补仓</span></td>
+            <td class="col-level-combined live-level"><span class="level-badge level-3">倍投3级</span> <span class="mult-val">2倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct flat">已确认</span></span></td>
             <td class="col-q"><span class="live-q"><span class="pct down">-27.54%</span></span></td>
-            <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
+            <td class="col-shares"><span class="live-shares"><span class="shares-val">27</span></span></td>
             <td class="col-price">10</td>
-            <td class="col-final-mult"><span class="live-mult"><span class="text-gray">0</span></span></td>
-            <td class="col-amount"><span class="live-amount"><span class="text-gray">¥0</span></span></td>
+            <td class="col-final-mult"><span class="live-mult"><span class="guide-mult">54</span></span></td>
+            <td class="col-amount"><span class="live-amount"><span class="amt-val">¥540</span></span></td>
             <td class="col-date">2026-07-17</td>
             <td class="col-nav">1.9915</td>
             <td class="col-x"><span class="live-x"><span class="pct down">-4.57%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
-<tr class="row-watch" data-code="013402" data-d="1.1155" data-e="0.7984" data-o="0.7361" data-w="0.7112" data-action="关注" data-n="2" data-s="10" data-level="倍投3级">
+<tr class="row-watch" data-code="013402" data-d="1.1155" data-e="0.7984" data-o="0.7361" data-w="0.7112" data-action="关注" data-n="2" data-s="10" data-level="倍投3级" data-navs='[0.7984, 0.7944, 0.8041, 0.7834, 0.7786, 0.7676, 0.7782, 0.7737, 0.7967, 0.7872, 0.7667, 0.8, 0.7852, 0.7765, 0.7753, 0.7831, 0.7852, 0.7848, 0.7491, 0.7543, 0.7472]' data-val-signal="PE=23.4 适中" data-trend20="6.85">
             <td class="col-cat">恒生科技</td>
             <td class="col-code">013402</td>
             <td class="col-name">华夏恒生科技ETF联接（QDII）A</td>
             <td class="col-dd down"><span class="live-dd"><span class="pct down">-28.43%</span></span></td>
-            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+            <td class="col-rsi live-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
         <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
@@ -1625,8 +1766,8 @@ document.addEventListener('DOMContentLoaded', function() {
       </svg>
     </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-neutral">中性</span></div></div></td>
             <td class="col-val">PE=23.4<br><span class="text-orange small">适中</span></td>
-            <td class="col-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
-            <td class="col-level-combined"><span class="level-badge level-3">倍投3级</span> <span class="mult-val">2倍</span></td>
+            <td class="col-action live-action"><span class="action-badge" style="color:#5D6D7E;background:#E8EAF0;">关注</span></td>
+            <td class="col-level-combined live-level"><span class="level-badge level-3">倍投3级</span> <span class="mult-val">2倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct flat">已确认</span></span></td>
             <td class="col-q"><span class="live-q"><span class="pct up">+8.46%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">0</span></span></td>
@@ -1638,12 +1779,12 @@ document.addEventListener('DOMContentLoaded', function() {
             <td class="col-x"><span class="live-x"><span class="pct up">+12.26%</span></span></td>
             <td class="col-tp"><span class="text-gray">—</span></td>
         </tr>
-<tr class="" data-code="161725" data-d="1.6466" data-e="0.5842" data-o="1.6466" data-w="0.4959" data-action="可补仓" data-n="6" data-s="10" data-level="极限2级">
+<tr class="" data-code="161725" data-d="1.6466" data-e="0.5842" data-o="1.6466" data-w="0.4959" data-action="可补仓" data-n="6" data-s="10" data-level="极限2级" data-navs='[0.5842, 0.5839, 0.5623, 0.5573, 0.5438, 0.5395, 0.55, 0.5581, 0.55, 0.5582, 0.532, 0.5424, 0.537, 0.5112, 0.508, 0.5131, 0.4959, 0.5033, 0.5034, 0.5176, 0.5119]' data-val-signal="PE=20.3 适中" data-trend20="14.12">
             <td class="col-cat">白酒</td>
             <td class="col-code">161725</td>
             <td class="col-name">招商中证白酒A</td>
             <td class="col-dd down"><span class="live-dd"><span class="pct down">-64.52%</span></span></td>
-            <td class="col-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
+            <td class="col-rsi live-rsi"><div class="rsi-cell-wrap"><div class="rsi-wrap">
       <svg width="88" height="34" style="display:block;margin:0 auto;">
         <!-- 背景区域 -->
         <rect x="4" y="4" width="82.0" height="26.0" fill="#f8f9fa" rx="1"/>
@@ -1658,14 +1799,14 @@ document.addEventListener('DOMContentLoaded', function() {
         <!-- 参考线 70 -->
         <line x1="4" y1="11.8" x2="86.0" y2="11.8" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>
         <!-- RSI曲线 -->
-        <polyline points="4.0,15.3 6.7,15.1 9.5,19.4 12.2,21.2 14.9,18.9 17.7,24.0 20.4,21.8 23.1,21.4 25.9,21.3 28.6,21.7 31.3,21.8 34.1,20.8 36.8,21.3 39.5,21.1 42.3,20.7 45.0,18.9 47.7,18.2 50.5,16.4 53.2,14.6 55.9,12.1 58.7,14.4 61.4,12.1 64.1,13.6 66.9,12.6 69.6,13.6 72.3,15.1 75.1,13.3 77.8,12.4 80.5,11.3 83.3,11.1 86.0,10.4" fill="none" stroke="#4a90d9" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+        <polyline points="4.0,15.3 6.7,15.1 9.5,19.4 12.2,21.2 14.9,18.9 17.7,24.0 20.4,21.8 23.1,21.4 25.9,21.3 28.6,21.7 31.3,21.8 34.1,20.8 36.8,21.3 39.5,21.1 42.3,20.7 45.0,18.9 47.7,18.2 50.5,16.4 53.2,14.6 55.9,12.1 58.7,14.4 61.4,12.1 64.1,13.6 66.9,12.6 69.6,13.6 72.3,15.1 75.1,13.3 77.8,12.4 80.5,11.3 83.3,11.1 86.0,10.4" fill="none" stroke="#e74c3c" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
         <!-- 最后一个点 -->
-        <circle cx="86.0" cy="10.4" r="1.8" fill="#4a90d9" stroke="#fff" stroke-width="0.5"/>
+        <circle cx="86.0" cy="10.4" r="1.8" fill="#e74c3c" stroke="#fff" stroke-width="0.5"/>
       </svg>
-    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-neutral">中性</span></div></div></td>
+    </div><div class="rsi-sig-inline"><span class="rsi-badge rsi-overbought">超买</span></div></div></td>
             <td class="col-val">PE=20.3<br><span class="text-orange small">适中</span></td>
-            <td class="col-action"><span class="action-badge" style="color:#E65100;background:#FFEB9C;">可补仓</span></td>
-            <td class="col-level-combined"><span class="level-badge level-extreme-2">极限2级</span> <span class="mult-val">6倍</span></td>
+            <td class="col-action live-action"><span class="action-badge" style="color:#E65100;background:#FFEB9C;">可补仓</span></td>
+            <td class="col-level-combined live-level"><span class="level-badge level-extreme-2">极限2级</span> <span class="mult-val">6倍</span></td>
             <td class="col-change"><span class="live-change"><span class="pct flat">已确认</span></span></td>
             <td class="col-q"><span class="live-q"><span class="pct down">-64.52%</span></span></td>
             <td class="col-shares"><span class="live-shares"><span class="shares-val">64</span></span></td>
