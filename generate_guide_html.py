@@ -502,7 +502,7 @@ def generate():
                 change_html = f'<span class="m-change down">(较前日{sse_change_pct:.2f}% {sse_change_amount:.2f})</span>'
             else:
                 change_html = f'<span class="m-change flat">(较前日0.00%)</span>'
-        market_items.append(f'<div class="m-item"><span class="m-label">上证指数</span><span class="m-val">{sse_close:.0f}{change_html}</span></div>')
+        market_items.append(f'<div class="m-item"><span class="m-label">上证指数</span><span class="m-val" id="live-sse">{sse_close:.0f}{change_html}</span></div>')
     if sse_ma200:
         market_items.append(f'<div class="m-item"><span class="m-label">200日线</span><span class="m-val">{sse_ma200:.0f}</span></div>')
     if sse_rsi:
@@ -872,23 +872,25 @@ body.preview-landscape .top-bar {{ border-radius: 0; }}
   tbody tr.row-watch td:nth-child(1), tbody tr.row-watch td:nth-child(2), tbody tr.row-watch td:nth-child(3) {{ background: #FFFBEA; }}
   .footer {{ display: none; }}
 }}
-.live-est {{ 
-  color: #E67E22 !important;
-  font-size: 12px;
-}}
+/* 实时状态只作为紧凑标记，不覆盖原始数值颜色、字号或粗细。 */
+.live-est {{ display: inline; }}
 .live-est .live-tag {{
-  display: block;
+  display: inline;
+  margin-left: 3px;
   font-size: 9px;
-  color: #999;
+  color: #95a5a6;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
   font-weight: normal;
+  vertical-align: 1px;
 }}
 .live-indicator {{
   display: inline-block;
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
-  background: #E67E22;
-  margin-right: 4px;
+  background: #95a5a6;
+  margin-right: 2px;
+  vertical-align: 1px;
   animation: live-pulse 2s infinite;
 }}
 @keyframes live-pulse {{
@@ -952,18 +954,32 @@ function loadLiveSnapshot() {{
       return response.json();
     }})
     .then(function(snapshot) {{
-      var today = new Date().toISOString().slice(0, 10);
-      if (!snapshot || snapshot.trade_date !== today || !snapshot.estimates) return {{}};
-      return snapshot.estimates;
+      var now = new Date();
+      var today = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+      if (!snapshot || snapshot.trade_date !== today || !snapshot.estimates) return null;
+      return snapshot;
     }})
-    .catch(function() {{ return {{}}; }});
+    .catch(function() {{ return null; }});
   return liveSnapshotPromise;
 }}
 
 function fetchEstimate(code) {{
-  return loadLiveSnapshot().then(function(estimates) {{
-    return estimates[code] || null;
+  return loadLiveSnapshot().then(function(snapshot) {{
+    return snapshot && snapshot.estimates ? snapshot.estimates[code] || null : null;
   }});
+}}
+
+function updateSseIndex(snapshot) {{
+  if (!snapshot || !snapshot.sse_index) return;
+  var sse = snapshot.sse_index;
+  var target = document.getElementById('live-sse');
+  if (!target || !isFinite(sse.close) || !isFinite(sse.change_pct)) return;
+  var cls = sse.change_pct > 0 ? 'up' : (sse.change_pct < 0 ? 'down' : 'flat');
+  var pctSign = sse.change_pct > 0 ? '+' : '';
+  var changeSign = sse.change > 0 ? '+' : '';
+  target.innerHTML = Number(sse.close).toFixed(0)
+    + '<span class="m-change ' + cls + '">(较前日' + pctSign + Number(sse.change_pct).toFixed(2)
+    + '% ' + changeSign + Number(sse.change).toFixed(2) + ')</span>';
 }}
 
 // 核心：基于实时估值重算单行全部指标
@@ -1078,10 +1094,12 @@ function updateSummary() {{
 // 批量读取同站实时估值快照并更新页面。
 async function updateAllFunds() {{
   liveSnapshotPromise = null;
-  var estimates = await loadLiveSnapshot();
+  var snapshot = await loadLiveSnapshot();
+  var estimates = snapshot && snapshot.estimates ? snapshot.estimates : {{}};
   for (var i = 0; i < funds.length; i++) {{
     updateCell(funds[i], estimates[funds[i].code] || null);
   }}
+  updateSseIndex(snapshot);
   updateSummary();
 }}
 

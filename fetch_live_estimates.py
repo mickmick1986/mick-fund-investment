@@ -18,6 +18,29 @@ HEADERS = {
 }
 
 
+def fetch_sse_index(session: requests.Session) -> dict | None:
+    response = session.get(
+        "https://hq.sinajs.cn/list=s_sh000001", headers=HEADERS, timeout=12
+    )
+    response.raise_for_status()
+    text = response.content.decode("gbk", errors="replace")
+    if '"' not in text:
+        return None
+    fields = text.split('"')[1].split(",")
+    if len(fields) < 5:
+        return None
+    close = float(fields[1])
+    change = float(fields[2])
+    change_pct = float(fields[3])
+    if close <= 0:
+        return None
+    return {
+        "close": round(close, 2),
+        "change": round(change, 2),
+        "change_pct": round(change_pct, 4),
+    }
+
+
 def fetch_one(session: requests.Session, code: str) -> dict | None:
     response = session.get(
         f"https://hq.sinajs.cn/list=fu_{code}", headers=HEADERS, timeout=12
@@ -59,6 +82,13 @@ def main() -> int:
                 print(f"{code}: {error}")
                 failures.append(code)
 
+    try:
+        with requests.Session() as session:
+            sse_index = fetch_sse_index(session)
+    except (requests.RequestException, ValueError, IndexError) as error:
+        print(f"SSE index: {error}")
+        sse_index = None
+
     now = datetime.now(ZoneInfo("Asia/Shanghai"))
     snapshot = {
         "trade_date": now.strftime("%Y-%m-%d"),
@@ -66,6 +96,7 @@ def main() -> int:
         "source": "Sina fund estimate",
         "estimate_count": len(estimates),
         "estimates": estimates,
+        "sse_index": sse_index,
     }
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT_PATH.write_text(
