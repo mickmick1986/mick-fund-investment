@@ -326,7 +326,9 @@ var BUY_SIGNALS = ['强烈补仓', '建议补仓', '可补仓'];
 
 // 从表格行解析基金数据（含完整数据属性）
 var funds = [];
-(function initFunds() {
+function initFunds() {
+  if (funds.length) return;
+  // HTML 脚本位于 head，需在 DOM 构建完成后再读取基金行。
   var rows = document.querySelectorAll('tbody tr');
   rows.forEach(function(row) {
     var code = row.getAttribute('data-code');
@@ -353,7 +355,7 @@ var funds = [];
       }
     });
   });
-})();
+}
 
 // 实时估值由 GitHub Actions 抓取并发布为本站同源快照，避免浏览器跨域请求被数据源拒绝。
 var LIVE_SNAPSHOT_URL = 'live_estimates.json';
@@ -586,12 +588,13 @@ function mainLoop() {
   }
 }
 
-// 启动
-(function() {
+// 启动：脚本在 head 中，等待表格 DOM 完整后才读取基金行并开始刷新。
+document.addEventListener('DOMContentLoaded', function() {
+  initFunds();
   var timerEl = document.getElementById('refresh-timer');
   if (timerEl) timerEl.textContent = COUNTDOWN_START;
-})();
-setTimeout(mainLoop, 1000);
+  setTimeout(mainLoop, 1000);
+});
 </script>
 </head>
 <body>
