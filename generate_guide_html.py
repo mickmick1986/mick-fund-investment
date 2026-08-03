@@ -60,8 +60,8 @@ def load_excel():
     return rows
 
 def compute_formulas(excel_rows):
-    """在Python中计算静态确认净值公式列（data_only=True拿不到缓存值）。
-    F列是盘中展示字段，不能参与静态G/Q/X计算，否则E已为最终净值时会重复计入。"""
+    """在Python中计算模板公式列（data_only=True拿不到缓存值）。
+    严格遵循模板既定口径：G/Q/X均为基准值线性叠加F列当日涨跌。"""
     for er in excel_rows:
         e = er.get('e_val')  # E: 最新净值
         d = er.get('d_val')  # D: 历史最高净值
@@ -88,9 +88,9 @@ def compute_formulas(excel_rows):
         n_n = to_float(n_val)
         s_n = to_float(s_val)
         
-        # G = (E-D)/D；E是确认净值，静态计算不叠加F。
+        # G = (E-D)/D + F；严格保留模板的线性叠加口径。
         if e_n is not None and d_n is not None and d_n != 0:
-            g_val = (e_n - d_n) / d_n
+            g_val = (e_n - d_n) / d_n + (f_n or 0)
         else:
             g_val = None
         er['drawdown'] = g_val
@@ -102,8 +102,8 @@ def compute_formulas(excel_rows):
             p_val = None
         er['p_val'] = p_val
         
-        # Q = P = (E-O)/O；锚点比较直接以确认净值计算。
-        q_val = p_val
+        # Q = P + F；严格保留模板的线性叠加口径。
+        q_val = p_val + (f_n or 0) if p_val is not None else None
         er['q_val'] = q_val
         
         # R = IF(OR(L="强烈补仓",L="建议补仓",L="可补仓"),MAX(IF(Q<0,INT(-Q*100),0),1),0)
@@ -130,9 +130,9 @@ def compute_formulas(excel_rows):
             u_val = None
         er['amount'] = u_val
         
-        # X = (E-W)/W；底谷涨幅直接以确认净值计算。
+        # X = (E-W)/W + F；严格保留模板的线性叠加口径。
         if e_n is not None and w_n is not None and w_n != 0:
-            x_val = (e_n - w_n) / w_n
+            x_val = (e_n - w_n) / w_n + (f_n or 0)
         else:
             x_val = None
         er['x_gain'] = x_val
@@ -473,7 +473,10 @@ def generate():
         confirmed_navs_json = json.dumps(f.get('confirmed_navs_desc', []), ensure_ascii=False)
         trend_20d_val = f.get('trend_20d_pct')
         val_signal_val = f.get('val_signal', '') or ''
-        rows.append(f'''<tr class="{row_cls}" data-code="{code}" data-d="{d_val}" data-e="{e_val}" data-o="{o_val}" data-w="{w_val}" data-action="{action_val}" data-n="{grade_mult_val}" data-s="{unit_price_val}" data-level="{level_val}" data-navs='{confirmed_navs_json}' data-val-signal="{val_signal_val}" data-trend20="{trend_20d_val if trend_20d_val is not None else ''}">
+        base_dd_pct = ((e_val - d_val) / d_val * 100) if d_val else 0
+        base_anchor_pct = ((e_val - o_val) / o_val * 100) if o_val else 0
+        base_trough_pct = ((e_val - w_val) / w_val * 100) if w_val else 0
+        rows.append(f'''<tr class="{row_cls}" data-code="{code}" data-d="{d_val}" data-e="{e_val}" data-o="{o_val}" data-w="{w_val}" data-base-dd="{base_dd_pct}" data-base-q="{base_anchor_pct}" data-base-x="{base_trough_pct}" data-action="{action_val}" data-n="{grade_mult_val}" data-s="{unit_price_val}" data-level="{level_val}" data-navs='{confirmed_navs_json}' data-val-signal="{val_signal_val}" data-trend20="{trend_20d_val if trend_20d_val is not None else ''}">
             <td class="col-cat">{f['cat']}</td>
             <td class="col-code">{code}</td>
             <td class="col-name">{f['name']}</td>
@@ -937,6 +940,9 @@ function initFunds() {{
       nav: parseFloat(row.getAttribute('data-e')) || 0,
       anchor: parseFloat(row.getAttribute('data-o')) || 0,
       trough: parseFloat(row.getAttribute('data-w')) || 0,
+      base_drawdown_pct: parseFloat(row.getAttribute('data-base-dd')) || 0,
+      base_anchor_pct: parseFloat(row.getAttribute('data-base-q')) || 0,
+      base_trough_pct: parseFloat(row.getAttribute('data-base-x')) || 0,
       action: row.getAttribute('data-action') || '',
       grade_mult: parseFloat(row.getAttribute('data-n')) || 0,
       unit_price: parseFloat(row.getAttribute('data-s')) || 0,
@@ -1119,16 +1125,18 @@ function updateCell(fd, data, snapshotFund, regimeParams) {{
 
   if (fd.nav <= 0) return;
 
-  // 2. G列-峰值回撤（实时重算）= (Peak - EstNAV) / Peak。
-  // 与 Python 同步使用 4 位净值精度和 1 位回撤精度，避免阈值边界出现分歧。
+  // 2. G列-峰值回撤：严格按模板基准回撤 + F列当日涨跌的线性口径。
+  // estNav只用于RSI当日估算，不参与G/Q/X的模板公式计算。
   var estNav = roundTo(fd.nav * (1 + gszzl / 100), 4);
+  var drawdownSigned = 0;
   var newDD = 0;
   if (fd.peak > 0) {{
-    newDD = (fd.peak - estNav) / fd.peak * 100;
+    drawdownSigned = fd.base_drawdown_pct + gszzl;
+    newDD = -drawdownSigned; // 等级与三指标规则使用正值回撤幅度。
     var ddCell = row.querySelector('.live-dd');
     if (ddCell) {{
-      var ddCls = newDD < 0 ? 'up' : (newDD > 0 ? 'down' : 'flat');
-      ddCell.innerHTML = '<span class="pct ' + ddCls + ' live-est">' + newDD.toFixed(2) + '%</span>';
+      var ddCls = drawdownSigned > 0 ? 'up' : (drawdownSigned < 0 ? 'down' : 'flat');
+      ddCell.innerHTML = '<span class="pct ' + ddCls + ' live-est">' + (drawdownSigned >= 0 ? '+' : '') + drawdownSigned.toFixed(2) + '%</span>';
       ddCell.setAttribute('data-live', '1');
     }}
   }}
@@ -1163,10 +1171,10 @@ function updateCell(fd, data, snapshotFund, regimeParams) {{
     levelCell.setAttribute('data-live', '1');
   }}
 
-  // 4. Q列-近期总涨跌幅：直接用实时估算净值对锚点计算，避免把两段百分比直接相加。
+  // 4. Q列-近期总涨跌幅：严格按模板P列基准涨跌 + F列当日涨跌的线性口径。
   var qVal = 0;
   if (fd.anchor > 0) {{
-    qVal = (estNav - fd.anchor) / fd.anchor * 100;
+    qVal = fd.base_anchor_pct + gszzl;
   }}
   var qCell = row.querySelector('.live-q');
   if (qCell) {{
@@ -1209,9 +1217,9 @@ function updateCell(fd, data, snapshotFund, regimeParams) {{
     amtCell.setAttribute('data-live', amount > 0 ? '2' : '0');
   }}
 
-  // 7. X列-上涨幅度：直接用实时估算净值对最近底谷计算。
+  // 7. X列-上涨幅度：严格按模板底谷基准涨跌 + F列当日涨跌的线性口径。
   if (fd.trough > 0) {{
-    var xVal = (estNav - fd.trough) / fd.trough * 100;
+    var xVal = fd.base_trough_pct + gszzl;
     var xCell = row.querySelector('.live-x');
     if (xCell) {{
       var xCls = xVal > 0 ? 'up' : (xVal < 0 ? 'down' : 'flat');

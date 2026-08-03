@@ -201,18 +201,18 @@ def setup_new_row_formulas(ws, row):
     if g_val and str(g_val).startswith('='):
         return False
 
-    ws.cell(row=row, column=7).value = f'=(E{row}-D{row})/D{row}'
+    ws.cell(row=row, column=7).value = f'=(E{row}-D{row})/D{row}+F{row}'
     ws.cell(row=row, column=7).number_format = '0.00%'
     ws.cell(row=row, column=16).value = f'=(E{row}-O{row})/O{row}'
     ws.cell(row=row, column=16).number_format = '0.00%'
-    ws.cell(row=row, column=17).value = f'=P{row}'
+    ws.cell(row=row, column=17).value = f'=P{row}+F{row}'
     ws.cell(row=row, column=17).number_format = '0.00%'
     ws.cell(row=row, column=18).value = f'=IF(OR(L{row}="强烈补仓",L{row}="建议补仓",L{row}="可补仓"),MAX(IF(Q{row}<0,INT(-Q{row}*100),0),1),0)'
     if not ws.cell(row=row, column=19).value:
         ws.cell(row=row, column=19).value = 10
     ws.cell(row=row, column=20).value = f'=N{row}*R{row}'
     ws.cell(row=row, column=21).value = f'=S{row}*T{row}'
-    ws.cell(row=row, column=24).value = f'=(E{row}-W{row})/W{row}'
+    ws.cell(row=row, column=24).value = f'=(E{row}-W{row})/W{row}+F{row}'
     ws.cell(row=row, column=24).number_format = '0.00%'
     if not ws.cell(row=row, column=26).value:
         ws.cell(row=row, column=26).value = "否"
@@ -358,20 +358,17 @@ def main():
             ws.cell(row=row, column=5).value = fund['latest_nav']
             ws.cell(row=row, column=5).number_format = '0.0000'
 
-            # 最终结算模式：F列清空，且G/Q/X只按确认净值计算，防止F与E重复计入当日涨跌。
-            if final_nav_mode:
-                ws.cell(row=row, column=6).value = None
-            else:
-                dc = fund['daily_change']
-                ws.cell(row=row, column=6).value = None if dc is None else dc / 100
+            # F列为当日涨跌参考值；G/Q/X严格保留模板“基准值 + F”的线性叠加公式。
+            dc = fund['daily_change']
+            ws.cell(row=row, column=6).value = None if dc is None else dc / 100
             ws.cell(row=row, column=6).number_format = '0.00%'
-            ws.cell(row=row, column=7).value = f'=(E{row}-D{row})/D{row}'
+            ws.cell(row=row, column=7).value = f'=(E{row}-D{row})/D{row}+F{row}'
             ws.cell(row=row, column=7).number_format = '0.00%'
             ws.cell(row=row, column=16).value = f'=(E{row}-O{row})/O{row}'
             ws.cell(row=row, column=16).number_format = '0.00%'
-            ws.cell(row=row, column=17).value = f'=P{row}'
+            ws.cell(row=row, column=17).value = f'=P{row}+F{row}'
             ws.cell(row=row, column=17).number_format = '0.00%'
-            ws.cell(row=row, column=24).value = f'=(E{row}-W{row})/W{row}'
+            ws.cell(row=row, column=24).value = f'=(E{row}-W{row})/W{row}+F{row}'
             ws.cell(row=row, column=24).number_format = '0.00%'
 
             # H列: RSI数值
