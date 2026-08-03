@@ -355,36 +355,34 @@ var funds = [];
   });
 })();
 
-// JSONP获取单个基金实时估值
+// 实时估值由 GitHub Actions 抓取并发布为本站同源快照，避免浏览器跨域请求被数据源拒绝。
+var LIVE_SNAPSHOT_URL = 'live_estimates.json';
+var liveSnapshotPromise = null;
+function loadLiveSnapshot() {
+  if (liveSnapshotPromise) return liveSnapshotPromise;
+  liveSnapshotPromise = fetch(LIVE_SNAPSHOT_URL + '?_=' + Date.now(), { cache: 'no-store' })
+    .then(function(response) {
+      if (!response.ok) throw new Error('snapshot unavailable');
+      return response.json();
+    })
+    .then(function(snapshot) {
+      var today = new Date().toISOString().slice(0, 10);
+      if (!snapshot || snapshot.trade_date !== today || !snapshot.estimates) return {};
+      return snapshot.estimates;
+    })
+    .catch(function() { return {}; });
+  return liveSnapshotPromise;
+}
+
 function fetchEstimate(code) {
-  return new Promise(function(resolve) {
-    var called = false;
-    var timer = setTimeout(function() {
-      if (!called) { called = true; resolve(null); }
-    }, 5000);
-    window.jsonpgz = function(data) {
-      if (!called) {
-        called = true;
-        clearTimeout(timer);
-        resolve(data);
-        delete window.jsonpgz;
-      }
-    };
-    var script = document.createElement('script');
-    script.src = 'https://fundgz.1234567.com.cn/js/' + code + '.js?rt=' + Date.now();
-    script.onerror = function() {
-      if (!called) { called = true; clearTimeout(timer); resolve(null); delete window.jsonpgz; }
-    };
-    document.head.appendChild(script);
-    setTimeout(function() {
-      if (script.parentNode) script.parentNode.removeChild(script);
-    }, 6000);
+  return loadLiveSnapshot().then(function(estimates) {
+    return estimates[code] || null;
   });
 }
 
 // 核心：基于实时估值重算单行全部指标
 function updateCell(fd, data) {
-  if (!data || !data.gszzl) return;
+  if (!data || data.gszzl === undefined || data.gszzl === null || data.gszzl === '') return;
   var gszzl = parseFloat(data.gszzl);  // 实时涨跌幅（百分比）
   var row = fd.row;
 
@@ -491,18 +489,13 @@ function updateSummary() {
   }
 }
 
-// 批量获取所有基金实时数据
+// 批量读取同站实时估值快照并更新页面。
 async function updateAllFunds() {
+  liveSnapshotPromise = null;
+  var estimates = await loadLiveSnapshot();
   for (var i = 0; i < funds.length; i++) {
-    try {
-      var data = await fetchEstimate(funds[i].code);
-      updateCell(funds[i], data);
-    } catch(e) {}
-    if (i < funds.length - 1) {
-      await new Promise(function(r) { setTimeout(r, 200); });
-    }
+    updateCell(funds[i], estimates[funds[i].code] || null);
   }
-  // 全部拉完后更新汇总
   updateSummary();
 }
 
@@ -522,6 +515,8 @@ function getRefreshMode() {
   var total = h * 60 + m;
   // 9:30-11:30 上午盘中 → 慢速
   if (total >= 570 && total <= 690) return 'slow';
+  // 11:30-13:00 午间休市：展示上午收盘的最后一笔估值，不再频繁请求。
+  if (total > 690 && total < 780) return 'lunch';
   // 13:00-14:29 下午前段 → 慢速
   if (total >= 780 && total < 870) return 'slow';
   // 14:30-15:00 高频窗口 → 快速
@@ -569,6 +564,14 @@ function mainLoop() {
     updateAllFunds();
     setTimeout(mainLoop, SLOW_INTERVAL);
     countdown = COUNTDOWN_START;
+  } else if (mode === 'lunch') {
+    if (statusEl) { statusEl.textContent = '午间收盘估值'; statusEl.style.color = '#3498db'; }
+    // 用户午间首次打开页面时，拉取一次上午最后报价；已获取后不再重复请求。
+    if (!window.__lunchEstimateLoaded) {
+      window.__lunchEstimateLoaded = true;
+      updateAllFunds();
+    }
+    setTimeout(mainLoop, 60 * 1000);
   } else {
     if (statusEl) {
       statusEl.textContent = FINAL_NAV_MODE ? '✓确认净值（盘后）' : '⏳盘后';

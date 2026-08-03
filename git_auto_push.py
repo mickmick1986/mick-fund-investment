@@ -18,14 +18,17 @@ SOURCE_HTML = ROOT / "金字塔丛林补仓指导图.html"
 PAGES_HTML = ROOT / "deploy" / "index.html"
 TRACKED_PATHS = [
     ".github/workflows/deploy.yml",
+    ".github/workflows/live-estimates.yml",
     ".gitignore",
     "git_auto_push.py",
     "generate_guide_html.py",
     "enrich_fund_data_v2.py",
     "fill_excel_combined.py",
+    "fetch_live_estimates.py",
     "fund_data_enriched.json",
     "金字塔丛林补仓指导图.html",
     "deploy/index.html",
+    "deploy/live_estimates.json",
 ]
 
 

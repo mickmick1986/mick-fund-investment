@@ -1,0 +1,75 @@
+name: 更新盘中基金估值
+
+on:
+  schedule:
+    - cron: '*/5 1-7 * * 1-5'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: live-estimates
+  cancel-in-progress: true
+
+jobs:
+  publish-live-estimates:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 配置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 安装依赖
+        run: pip install requests
+
+      - name: 判断中国交易时段
+        id: market
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+          now = datetime.now(ZoneInfo("Asia/Shanghai"))
+          minutes = now.hour * 60 + now.minute
+          active = now.weekday() < 5 and 570 <= minutes <= 900
+          print(f"active={'true' if active else 'false'}")
+          PY
+
+      - name: 抓取并写入实时估值快照
+        if: steps.market.outputs.active == 'true'
+        run: python fetch_live_estimates.py
+
+      - name: 提交实时估值快照
+        if: steps.market.outputs.active == 'true'
+        id: commit
+        run: |
+          if git diff --quiet -- deploy/live_estimates.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add deploy/live_estimates.json
+          git commit -m "chore: 更新盘中基金估值"
+          git push
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: 配置 Pages
+        if: steps.commit.outputs.changed == 'true'
+        uses: actions/configure-pages@v5
+
+      - name: 上传静态站点
+        if: steps.commit.outputs.changed == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: deploy
+
+      - name: 部署到 GitHub Pages
+        if: steps.commit.outputs.changed == 'true'
+        uses: actions/deploy-pages@v4
