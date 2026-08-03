@@ -877,16 +877,22 @@ body.preview-landscape .top-bar {{ border-radius: 0; }}
   tbody tr.row-watch td:nth-child(1), tbody tr.row-watch td:nth-child(2), tbody tr.row-watch td:nth-child(3) {{ background: #FFFBEA; }}
   .footer {{ display: none; }}
 }}
-/* 实时状态只作为紧凑标记，不覆盖原始数值颜色、字号或粗细。 */
-.live-est {{ display: inline; }}
+/* 实时/收盘状态独占第二行，不覆盖涨跌数字原有颜色、字号或粗细。 */
+.live-est {{
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.15;
+}}
 .live-est .live-tag {{
-  display: inline;
-  margin-left: 3px;
+  display: block;
+  margin-top: 2px;
   font-size: 9px;
   color: #95a5a6;
   font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
   font-weight: normal;
-  vertical-align: 1px;
+  line-height: 1;
+  white-space: nowrap;
 }}
 .live-indicator {{
   display: inline-block;
@@ -896,8 +902,8 @@ body.preview-landscape .top-bar {{ border-radius: 0; }}
   background: #95a5a6;
   margin-right: 2px;
   vertical-align: 1px;
-  animation: live-pulse 2s infinite;
 }}
+.live-indicator.is-live {{ animation: live-pulse 2s infinite; }}
 @keyframes live-pulse {{
   0%, 100% {{ opacity: 1; }}
   50% {{ opacity: 0.3; }}
@@ -1097,13 +1103,17 @@ function updateCell(fd, data, snapshotFund, regimeParams) {{
   if (!data || data.gszzl === undefined || data.gszzl === null || data.gszzl === '') return;
   var gszzl = parseFloat(data.gszzl);  // 实时涨跌幅（百分比）
   var row = fd.row;
+  var mode = getRefreshMode();
+  var isAfterClose = mode === 'afterclose';
+  var statusLabel = isAfterClose ? '已收盘' : '实时';
+  var indicatorClass = isAfterClose ? '' : ' is-live';
 
-  // 1. F列-当日涨跌（实时替换）
+  // 1. F列-当日涨跌（实时替换；状态标签独立显示在第二行）
   var changeCell = row.querySelector('.live-change');
   if (changeCell) {{
     var sign = gszzl >= 0 ? '+' : '';
     var cls = gszzl > 0 ? 'up' : (gszzl < 0 ? 'down' : 'flat');
-    changeCell.innerHTML = '<span class="pct ' + cls + ' live-est">' + sign + gszzl.toFixed(2) + '%<span class="live-tag"><span class="live-indicator"></span>实时</span></span>';
+    changeCell.innerHTML = '<span class="pct ' + cls + ' live-est"><span>' + sign + gszzl.toFixed(2) + '%</span><span class="live-tag"><span class="live-indicator' + indicatorClass + '"></span>' + statusLabel + '</span></span>';
     changeCell.setAttribute('data-live', '1');
   }}
 
