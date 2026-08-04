@@ -58,9 +58,14 @@ def fetch_one(session: requests.Session, code: str) -> dict | None:
     if estimate_nav <= 0 or confirmed_nav <= 0:
         return None
 
+    quote_date = fields[7].strip()
+    quote_time = fields[1].strip()
+    if not quote_date or not quote_time:
+        return None
     return {
         "gszzl": round((estimate_nav - confirmed_nav) / confirmed_nav * 100, 4),
-        "gztime": f"{fields[7]} {fields[1]}",
+        "gztime": f"{quote_date} {quote_time}",
+        "quote_date": quote_date,
     }
 
 
@@ -106,13 +111,22 @@ def main() -> int:
         sse_index = None
 
     now = datetime.now(ZoneInfo("Asia/Shanghai"))
+    today = now.strftime("%Y-%m-%d")
+    stale_quotes = [
+        code for code, quote in estimates.items()
+        if quote.get("quote_date") != today
+    ]
+    if stale_quotes:
+        print("Stale quotes:", ", ".join(stale_quotes))
+        return 3
+
     regime = data.get("market_regime", {})
     regime_params = data.get("market_regime_params") or {
         "rsi_tp_strong": 999 if regime.get("regime_key") == "correction" else 75,
         "rsi_tp_val": 999 if regime.get("regime_key") == "correction" else 70,
     }
     snapshot = {
-        "trade_date": now.strftime("%Y-%m-%d"),
+        "trade_date": today,
         "updated_at": now.strftime("%Y-%m-%d %H:%M:%S"),
         "source": "Sina fund estimate",
         "estimate_count": len(estimates),
