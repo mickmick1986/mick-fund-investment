@@ -7,12 +7,12 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
+# 快照只需提交到main；Pages由既有分支部署链路更新。
+# 不在此工作流重复部署Pages，避免部署耗时与下一轮5分钟任务相互取消。
 concurrency:
   group: live-estimates
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   publish-live-estimates:
@@ -60,16 +60,3 @@ jobs:
           git push
           echo "changed=true" >> "$GITHUB_OUTPUT"
 
-      - name: 配置 Pages
-        if: steps.commit.outputs.changed == 'true'
-        uses: actions/configure-pages@v5
-
-      - name: 上传静态站点
-        if: steps.commit.outputs.changed == 'true'
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: deploy
-
-      - name: 部署到 GitHub Pages
-        if: steps.commit.outputs.changed == 'true'
-        uses: actions/deploy-pages@v4
