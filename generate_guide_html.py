@@ -1279,6 +1279,13 @@ async function updateAllFunds() {{
   }}
   updateSseIndex(snapshot);
   updateSummary();
+
+  // 顶部必须展示实际加载的实时快照时间，不能继续显示生成HTML时的确认数据更新时间。
+  var liveTimeEl = document.getElementById('live-snapshot-time');
+  if (liveTimeEl && snapshot && snapshot.updated_at) {{
+    liveTimeEl.textContent = '实时快照: ' + snapshot.updated_at;
+    liveTimeEl.style.color = '#dbeeff';
+  }}
 }}
 
 // 时间调速逻辑，固定采用中国标准时间。
@@ -1407,7 +1414,7 @@ document.addEventListener('DOMContentLoaded', function() {{
     <span style="font-size:11px;opacity:0.7;margin-left:12px;"><span id="live-status" style="margin-right:8px;">⏳盘后</span>⏱ <span id="refresh-timer">60</span>秒后刷新</span>
     <span class="stats">{len(funds)}只基金 -- 需补仓<span class="highlight">{need_buy_count}</span>只 -- 共<span class="highlight">{total_shares:,.0f}</span>份 -- ¥<span class="highlight">{total_amount:,.0f}</span></span>
   </div>
-  <div style="font-size:12px;opacity:0.85;">数据更新: {update_time}</div>
+  <div id="live-snapshot-time" style="font-size:12px;opacity:0.85;">确认数据: {update_time}</div>
 </div>
 
 <div class="market-bar">
