@@ -971,6 +971,22 @@ function initFunds() {{
 // 实时估值由 GitHub Actions 抓取并发布为本站同源快照，避免浏览器跨域请求被数据源拒绝。
 var LIVE_SNAPSHOT_URL = 'live_estimates.json';
 var liveSnapshotPromise = null;
+
+// 所有日期与交易时段均固定按中国标准时间判断，避免用户设备处于其他时区而误判为盘后或休市。
+function getShanghaiClock() {{
+  var parts = new Intl.DateTimeFormat('en-CA', {{
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric', month: '2-digit', day: '2-digit', weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+  }}).formatToParts(new Date());
+  var data = {{}};
+  parts.forEach(function(part) {{ data[part.type] = part.value; }});
+  return {{
+    date: data.year + '-' + data.month + '-' + data.day,
+    weekday: data.weekday,
+    minutes: Number(data.hour) * 60 + Number(data.minute)
+  }};
+}}
+
 function loadLiveSnapshot() {{
   if (liveSnapshotPromise) return liveSnapshotPromise;
   liveSnapshotPromise = fetch(LIVE_SNAPSHOT_URL + '?_=' + Date.now(), {{ cache: 'no-store' }})
@@ -979,8 +995,7 @@ function loadLiveSnapshot() {{
       return response.json();
     }})
     .then(function(snapshot) {{
-      var now = new Date();
-      var today = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+      var today = getShanghaiClock().date;
       if (!snapshot || snapshot.trade_date !== today || !snapshot.estimates) return null;
       return snapshot;
     }})
@@ -1266,20 +1281,16 @@ async function updateAllFunds() {{
   updateSummary();
 }}
 
-// 时间调速逻辑
+// 时间调速逻辑，固定采用中国标准时间。
 function isTradingDay() {{
-  var d = new Date();
-  var day = d.getDay();
-  return day >= 1 && day <= 5;
+  var weekday = getShanghaiClock().weekday;
+  return weekday !== 'Sat' && weekday !== 'Sun';
 }}
 
 function getRefreshMode() {{
   // 确认净值只作为静态底稿；交易时段仍允许浏览器临时叠加实时估值。
   if (!isTradingDay()) return 'off';
-  var now = new Date();
-  var h = now.getHours();
-  var m = now.getMinutes();
-  var total = h * 60 + m;
+  var total = getShanghaiClock().minutes;
   // 9:30-11:30 上午盘中 → 慢速
   if (total >= 570 && total <= 690) return 'slow';
   // 11:30-13:00 午间休市：展示上午收盘的最后一笔估值，不再频繁请求。
