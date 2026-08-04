@@ -376,71 +376,9 @@ function initFunds() {
   });
 }
 
-// 盘中优先用 <script> 直连新浪行情。脚本标签不受 fetch/CORS 限制，页面无需等待后台定时任务。
-// 同源 JSON 仅作为首次加载、午间和数据源暂时不可用时的回退。
+// 实时估值由 GitHub Actions 抓取并发布为本站同源快照，避免浏览器跨域请求被数据源拒绝。
 var LIVE_SNAPSHOT_URL = 'live_estimates.json';
-var SINA_QUOTE_URL = 'https://hq.sinajs.cn/list=';
 var liveSnapshotPromise = null;
-
-function loadSinaQuotes(codes) {
-  return new Promise(function(resolve) {
-    if (!codes || !codes.length) { resolve({}); return; }
-    var script = document.createElement('script');
-    var settled = false;
-    var finish = function() {
-      if (settled) return;
-      settled = true;
-      var results = {};
-      var today = getShanghaiClock().date;
-      codes.forEach(function(code) {
-        var raw = window['hq_str_fu_' + code];
-        if (!raw || typeof raw !== 'string') return;
-        var fields = raw.split(',');
-        // Sina: 名称, 时间, 估算净值, 昨日确认净值, ..., 涨跌额, 涨跌幅, 日期
-        if (fields.length < 8 || fields[7] !== today) return;
-        var estimateNav = parseFloat(fields[2]);
-        var confirmedNav = parseFloat(fields[3]);
-        if (!isFinite(estimateNav) || !isFinite(confirmedNav) || estimateNav <= 0 || confirmedNav <= 0) return;
-        results[code] = {
-          gszzl: roundTo((estimateNav - confirmedNav) / confirmedNav * 100, 4),
-          gztime: fields[7] + ' ' + fields[1]
-        };
-      });
-      script.remove();
-      resolve(results);
-    };
-    script.async = true;
-    script.src = SINA_QUOTE_URL + codes.map(function(code) { return 'fu_' + code; }).join(',') + '&_=' + Date.now();
-    script.onload = finish;
-    script.onerror = finish;
-    document.head.appendChild(script);
-    setTimeout(finish, 8000);
-  });
-}
-
-function loadSinaSse() {
-  return new Promise(function(resolve) {
-    var script = document.createElement('script');
-    var settled = false;
-    var finish = function() {
-      if (settled) return;
-      settled = true;
-      var raw = window.hq_str_s_sh000001;
-      var fields = raw && typeof raw === 'string' ? raw.split(',') : [];
-      var close = parseFloat(fields[1]);
-      var change = parseFloat(fields[2]);
-      var changePct = parseFloat(fields[3]);
-      script.remove();
-      resolve(isFinite(close) && isFinite(changePct) ? { close: close, change: change, change_pct: changePct } : null);
-    };
-    script.async = true;
-    script.src = SINA_QUOTE_URL + 's_sh000001&_=' + Date.now();
-    script.onload = finish;
-    script.onerror = finish;
-    document.head.appendChild(script);
-    setTimeout(finish, 8000);
-  });
-}
 
 // 所有日期与交易时段均固定按中国标准时间判断，避免用户设备处于其他时区而误判为盘后或休市。
 function getShanghaiClock() {
@@ -737,38 +675,24 @@ function updateSummary() {
   }
 }
 
-// 盘中优先直接从新浪脚本读取；同源 JSON 只提供基础输入与不可用时的回退。
+// 批量读取同站实时估值快照并更新页面。
 async function updateAllFunds() {
   liveSnapshotPromise = null;
   var snapshot = await loadLiveSnapshot();
-  var mode = getRefreshMode();
-  var directEstimates = {};
-  var directSse = null;
-  if (mode === 'slow' || mode === 'fast') {
-    directEstimates = await loadSinaQuotes(funds.map(function(fd) { return fd.code; }));
-    directSse = await loadSinaSse();
-  }
-  var hasDirectQuotes = Object.keys(directEstimates).length > 0;
-  var estimates = hasDirectQuotes ? directEstimates : (snapshot && snapshot.estimates ? snapshot.estimates : {});
+  var estimates = snapshot && snapshot.estimates ? snapshot.estimates : {};
   var liveFunds = snapshot && snapshot.funds ? snapshot.funds : {};
   var regimeParams = snapshot && snapshot.market_regime ? snapshot.market_regime.params : null;
   for (var i = 0; i < funds.length; i++) {
     updateCell(funds[i], estimates[funds[i].code] || null, liveFunds[funds[i].code] || null, regimeParams);
   }
-  updateSseIndex(directSse ? { sse_index: directSse } : snapshot);
+  updateSseIndex(snapshot);
   updateSummary();
 
+  // 顶部必须展示实际加载的实时快照时间，不能继续显示生成HTML时的确认数据更新时间。
   var liveTimeEl = document.getElementById('live-snapshot-time');
-  if (liveTimeEl) {
-    if (hasDirectQuotes) {
-      var now = new Date();
-      var timeText = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).format(now);
-      liveTimeEl.textContent = '实时直连: ' + getShanghaiClock().date + ' ' + timeText + '（新浪）';
-      liveTimeEl.style.color = '#dbeeff';
-    } else if (snapshot && snapshot.updated_at) {
-      liveTimeEl.textContent = '快照回退: ' + snapshot.updated_at;
-      liveTimeEl.style.color = '#dbeeff';
-    }
+  if (liveTimeEl && snapshot && snapshot.updated_at) {
+    liveTimeEl.textContent = '实时快照: ' + snapshot.updated_at;
+    liveTimeEl.style.color = '#dbeeff';
   }
 }
 
