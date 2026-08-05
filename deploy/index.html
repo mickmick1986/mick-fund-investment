@@ -324,9 +324,9 @@ body.preview-landscape .top-bar { border-radius: 0; }
 var FINAL_NAV_MODE = true;
 // ========== 路线B 实时数据引擎 v2.0 ==========
 // 功能：盘中从天天基金API实时拉取净值 → 重算G/Q/R/S/T/U/U总计 → 更新页面
-// 时段：9:30-11:30/13:00-14:29 每5分钟 | 14:30-15:00 每30秒 | 盘后60秒整页刷新
-var LIVE_INTERVAL = 30 * 1000;     // 30秒（14:30-15:00高频窗口）
-var SLOW_INTERVAL = 5 * 60 * 1000; // 5分钟（盘中慢速）
+// 时段：9:30-11:30/13:00-14:29 每10分钟 | 14:30-15:00 每1分钟 | 盘后60秒整页刷新
+var LIVE_INTERVAL = 60 * 1000;      // 1分钟（14:30-15:00高频窗口）
+var SLOW_INTERVAL = 10 * 60 * 1000; // 10分钟（盘中慢速）
 var COUNTDOWN_START = 60;          // 页面刷新倒计时
 
 // 补仓信号关键词
@@ -750,12 +750,12 @@ function mainLoop() {
   var timerEl = document.getElementById('refresh-timer');
 
   if (mode === 'fast') {
-    if (statusEl) { statusEl.textContent = '⚡实时 30s'; statusEl.style.color = '#E67E22'; }
+    if (statusEl) { statusEl.textContent = '⚡实时 1min'; statusEl.style.color = '#E67E22'; }
     updateAllFunds();
     setTimeout(mainLoop, LIVE_INTERVAL);
     countdown = COUNTDOWN_START;
   } else if (mode === 'slow') {
-    if (statusEl) { statusEl.textContent = '🔄盘中 5min'; statusEl.style.color = '#3498db'; }
+    if (statusEl) { statusEl.textContent = '🔄盘中 10min'; statusEl.style.color = '#3498db'; }
     updateAllFunds();
     setTimeout(mainLoop, SLOW_INTERVAL);
     countdown = COUNTDOWN_START;
