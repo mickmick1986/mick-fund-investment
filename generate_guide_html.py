@@ -441,6 +441,7 @@ def generate():
     sse_dd = regime.get('sse_drawdown_from_peak')
     sse_change_pct = regime.get('sse_change_pct')
     sse_change_amount = regime.get('sse_change_amount')
+    market_turnover_trillion = regime.get('market_turnover_trillion')
     hs300_pct = regime.get('hs300_pe_pct')
     fear_greed = regime.get('fear_greed')
     hk_connect = regime.get('hk_connect')
@@ -510,6 +511,8 @@ def generate():
             else:
                 change_html = f'<span class="m-change flat">(较前日0.00%)</span>'
         market_items.append(f'<div class="m-item"><span class="m-label">上证指数</span><span class="m-val" id="live-sse">{sse_close:.0f}{change_html}</span></div>')
+    if market_turnover_trillion is not None:
+        market_items.append(f'<div class="m-item"><span class="m-label">成交额</span><span class="m-val turnover-val" id="live-market-turnover">{market_turnover_trillion:.2f}万亿</span></div>')
     if sse_ma200:
         market_items.append(f'<div class="m-item"><span class="m-label">200日线</span><span class="m-val">{sse_ma200:.0f}</span></div>')
     if sse_dd is not None:
@@ -634,6 +637,7 @@ body {{
 .market-bar .m-item {{ display: flex; align-items: baseline; gap: 6px; }}
 .market-bar .m-label {{ font-size: 14px; color: #000; font-weight: bold; }}
 .market-bar .m-val {{ font-size: 13px; font-weight: bold; color: #1a365d; }}
+.market-bar .turnover-val {{ color: #8b5a00; }}
 .market-bar .m-change {{ font-size: 12px; font-weight: normal; margin-left: 4px; }}
 .market-bar .m-change.up {{ color: #c62828; }}
 .market-bar .m-change.down {{ color: #2e7d32; }}
@@ -1019,6 +1023,11 @@ function updateSseIndex(snapshot) {{
   target.innerHTML = Number(sse.close).toFixed(0)
     + '<span class="m-change ' + cls + '">(较前日' + pctSign + Number(sse.change_pct).toFixed(2)
     + '% ' + changeSign + Number(sse.change).toFixed(2) + ')</span>';
+
+  var turnoverTarget = document.getElementById('live-market-turnover');
+  if (turnoverTarget && isFinite(sse.market_turnover_trillion)) {{
+    turnoverTarget.textContent = Number(sse.market_turnover_trillion).toFixed(2) + '万亿';
+  }}
 }}
 
 function roundTo(value, decimals) {{

@@ -43,6 +43,7 @@ body {
 .market-bar .m-item { display: flex; align-items: baseline; gap: 6px; }
 .market-bar .m-label { font-size: 14px; color: #000; font-weight: bold; }
 .market-bar .m-val { font-size: 13px; font-weight: bold; color: #1a365d; }
+.market-bar .turnover-val { color: #8b5a00; }
 .market-bar .m-change { font-size: 12px; font-weight: normal; margin-left: 4px; }
 .market-bar .m-change.up { color: #c62828; }
 .market-bar .m-change.down { color: #2e7d32; }
@@ -428,6 +429,11 @@ function updateSseIndex(snapshot) {
   target.innerHTML = Number(sse.close).toFixed(0)
     + '<span class="m-change ' + cls + '">(较前日' + pctSign + Number(sse.change_pct).toFixed(2)
     + '% ' + changeSign + Number(sse.change).toFixed(2) + ')</span>';
+
+  var turnoverTarget = document.getElementById('live-market-turnover');
+  if (turnoverTarget && isFinite(sse.market_turnover_trillion)) {
+    turnoverTarget.textContent = Number(sse.market_turnover_trillion).toFixed(2) + '万亿';
+  }
 }
 
 function roundTo(value, decimals) {
@@ -828,6 +834,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <div class="market-bar">
   <div class="m-item"><span class="m-label">市场状态</span><span class="m-val">调整期</span></div>
 <div class="m-item"><span class="m-label">上证指数</span><span class="m-val" id="live-sse">3878<span class="m-change up">(较前日+1.47% +56.14)</span></span></div>
+<div class="m-item"><span class="m-label">成交额</span><span class="m-val turnover-val" id="live-market-turnover">2.55万亿</span></div>
 <div class="m-item"><span class="m-label">200日线</span><span class="m-val">4012</span></div>
 <div class="m-item"><span class="m-label">峰值回撤</span><span class="m-val" style="color:#E74C3C">-8.6%</span></div>
 <div class="m-item"><span class="m-label">恐贪指数(08-05)</span><span class="m-val"><span class="fg-fear" style="color:#5C9A58; font-weight:700;">26</span> <span class="fg-badge fg-fear">恐惧</span></span></div>

@@ -20,24 +20,40 @@ HEADERS = {
 
 def fetch_sse_index(session: requests.Session) -> dict | None:
     response = session.get(
-        "https://hq.sinajs.cn/list=s_sh000001", headers=HEADERS, timeout=12
+        "https://hq.sinajs.cn/list=s_sh000001,sz399001,bj899050", headers=HEADERS, timeout=12
     )
     response.raise_for_status()
     text = response.content.decode("gbk", errors="replace")
-    if '"' not in text:
+    quotes = {}
+    for line in text.splitlines():
+        if '="' not in line or '"' not in line:
+            continue
+        key = line.split("hq_str_")[1].split("=")[0]
+        quotes[key] = line.split('"')[1].split(",")
+
+    shanghai = quotes.get("s_sh000001", [])
+    shenzhen = quotes.get("sz399001", [])
+    beijing = quotes.get("bj899050", [])
+    if len(shanghai) < 6 or len(shenzhen) < 10:
         return None
-    fields = text.split('"')[1].split(",")
-    if len(fields) < 5:
-        return None
-    close = float(fields[1])
-    change = float(fields[2])
-    change_pct = float(fields[3])
+
+    close = float(shanghai[1])
+    change = float(shanghai[2])
+    change_pct = float(shanghai[3])
+    # 沪市摘要行情第6字段为成交额（万元）；深/北指数第10字段为成交额（元）。
+    shanghai_turnover_yuan = float(shanghai[5]) * 10_000
+    shenzhen_turnover_yuan = float(shenzhen[9])
+    beijing_turnover_yuan = float(beijing[9]) if len(beijing) >= 10 else 0
+    market_turnover_trillion = (
+        shanghai_turnover_yuan + shenzhen_turnover_yuan + beijing_turnover_yuan
+    ) / 1_000_000_000_000
     if close <= 0:
         return None
     return {
         "close": round(close, 2),
         "change": round(change, 2),
         "change_pct": round(change_pct, 4),
+        "market_turnover_trillion": round(market_turnover_trillion, 2),
     }
 
 

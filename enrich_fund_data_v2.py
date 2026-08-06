@@ -696,6 +696,20 @@ def fetch_sse_index_history(symbol="sh000001", datalen=300):
         return []
 
 
+def get_confirmed_market_turnover(target_date):
+    """从同日盘中快照读取沪深全市场成交额，避免把日K成交量误当成交额。"""
+    snapshot_path = os.path.join(os.path.dirname(__file__), "deploy", "live_estimates.json")
+    try:
+        with open(snapshot_path, "r", encoding="utf-8") as f:
+            snapshot = json.load(f)
+        if snapshot.get("trade_date") != target_date:
+            return None
+        value = (snapshot.get("sse_index") or {}).get("market_turnover_trillion")
+        return float(value) if value is not None else None
+    except (OSError, ValueError, json.JSONDecodeError):
+        return None
+
+
 def detect_market_regime(danjuan_data):
     """检测当前A股市场状态（4维度: 均线趋势/估值分位/RSI/回撤深度）
     
@@ -715,6 +729,7 @@ def detect_market_regime(danjuan_data):
             "sse_rsi": None, "sse_drawdown_from_peak": None,
             "sse_ma200_pct": None, "hs300_pe_pct": None,
             "sse_prev_close": None, "sse_change_pct": None, "sse_change_amount": None,
+            "market_turnover_trillion": None,
         }
     
     closes = [float(k["close"]) for k in klines]
@@ -722,6 +737,8 @@ def detect_market_regime(danjuan_data):
     prev_close = closes[-2] if len(closes) >= 2 else latest_close
     sse_change_amount = latest_close - prev_close
     sse_change_pct = (latest_close - prev_close) / prev_close * 100 if prev_close else 0
+    # 新浪日K的 volume 字段是成交量，不是成交额；确认层仅使用同日盘中快照保存的沪深全市场成交额。
+    market_turnover_trillion = get_confirmed_market_turnover(klines[-1].get("day"))
     
     # 维度1: 200日均线
     ma200 = sum(closes[-200:]) / 200
@@ -800,6 +817,7 @@ def detect_market_regime(danjuan_data):
         "sse_prev_close": round(prev_close, 2),
         "sse_change_pct": round(sse_change_pct, 2),
         "sse_change_amount": round(sse_change_amount, 2),
+        "market_turnover_trillion": round(market_turnover_trillion, 2) if market_turnover_trillion is not None else None,
         "hs300_pe_pct": round(hs300_pe_pct, 1) if hs300_pe_pct else None,
         "reasons": reasons,
     }
@@ -1826,7 +1844,9 @@ def main():
         # RSI历史序列（用于折线图）—— 从确认净值计算。
         # recent_navs 按 newest→oldest 排列；当前确认净值 RSI 必须与折线末值同源。
         rsi_history = None
-        confirmed_navs_desc = recent_navs[:21] if recent_navs else []
+        # 保留完整45个确认净值点：正式简单RSI仍只取最近15点，
+        # 但独立Wilder验证需要更长的平滑暖机历史。该字段不参与Excel公式或止盈锚点写入。
+        confirmed_navs_desc = recent_navs[:45] if recent_navs else []
         if recent_navs:
             navs_old_to_new = list(reversed(recent_navs))
             rsi_history_raw = calc_rsi_series(navs_old_to_new, 14)
