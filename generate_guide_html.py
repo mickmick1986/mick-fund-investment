@@ -513,15 +513,14 @@ def generate():
     if sse_ma200:
         market_items.append(f'<div class="m-item"><span class="m-label">200日线</span><span class="m-val">{sse_ma200:.0f}</span></div>')
     if sse_dd is not None:
-        # 峰值回撤本身是距高点的负值；展示色和正负号按当日A股涨跌规则处理。
-        # 当日上涨：红色且只展示回撤幅度；当日下跌：绿色并保留负号。
-        dd_display = f'{abs(sse_dd):.1f}%'
+        # 峰值回撤是当前点位相对最近峰值的偏离，负号必须保留。
+        # 颜色仅按上证当天涨跌采用A股红涨绿跌规则。
+        dd_display = f'{sse_dd:.1f}%'
         dd_color = ''
         if sse_change_pct is not None:
             if sse_change_pct > 0:
                 dd_color = ' style="color:#E74C3C"'
             elif sse_change_pct < 0:
-                dd_display = f'{sse_dd:.1f}%'
                 dd_color = ' style="color:#27AE60"'
         market_items.append(f'<div class="m-item"><span class="m-label">峰值回撤</span><span class="m-val"{dd_color}>{dd_display}</span></div>')
     # 恐贪指数（按韭圈儿颜色标准：恐惧=绿色，贪婪=红色）
