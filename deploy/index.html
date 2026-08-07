@@ -523,7 +523,8 @@ function getLiveAdvice(drawdownPct, rsi, valSignal, trend20dPct, regimeParams) {
   var strong = regimeParams && isFinite(regimeParams.rsi_tp_strong) ? regimeParams.rsi_tp_strong : 75;
   var valThreshold = regimeParams && isFinite(regimeParams.rsi_tp_val) ? regimeParams.rsi_tp_val : 70;
   var oversold = isFinite(rsi) && rsi < 30;
-  var overbought = isFinite(rsi) && rsi > valThreshold;
+  // 买入侧固定遵守三指标边界：RSI>70即不追高；止盈阈值不参与该判断。
+  var overbought = isFinite(rsi) && rsi > 70;
   if (isFinite(rsi) && rsi > strong) return { action: '考虑止盈', meaning: 'RSI超高位，考虑分批止盈' };
   if (isFinite(rsi) && rsi > valThreshold && valCls === 'bad') return { action: '考虑止盈', meaning: '估值偏高+RSI超买，考虑止盈' };
   if (drawdownPct < 13) return { action: '暂不操作', meaning: '趋势完好，无需补仓' };

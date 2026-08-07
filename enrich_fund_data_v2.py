@@ -1156,7 +1156,9 @@ def get_signal_and_advice(drawdown_pct, rsi, val_signal, trend_20d_pct=None, reg
 
     rsi_oversold = rsi is not None and rsi < 30
     rsi_neutral = rsi is not None and 30 <= rsi <= 70
-    rsi_overbought = rsi is not None and rsi > tp_val_thresh  # 70-阈值且估值不bad，未被止盈捕获
+    # 买入侧固定采用三指标既定边界：RSI>70即不追高。
+    # 止盈侧的市场状态阈值仅用于决定是否触发止盈，不能影响买入拦截。
+    rsi_overbought = rsi is not None and rsi > 70
 
     # <13% 停止区
     if drawdown_pct < 13:
