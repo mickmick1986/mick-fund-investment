@@ -471,12 +471,13 @@ def generate():
         unit_price_val = f.get('unit_price', '') or ''
         level_val = f.get('level', '') or ''
         confirmed_navs_json = json.dumps(f.get('confirmed_navs_desc', []), ensure_ascii=False)
+        rsi_history_json = json.dumps(f.get('rsi_history', []), ensure_ascii=False)
         trend_20d_val = f.get('trend_20d_pct')
         val_signal_val = f.get('val_signal', '') or ''
         base_dd_pct = ((e_val - d_val) / d_val * 100) if d_val else 0
         base_anchor_pct = ((e_val - o_val) / o_val * 100) if o_val else 0
         base_trough_pct = ((e_val - w_val) / w_val * 100) if w_val else 0
-        rows.append(f'''<tr class="{row_cls}" data-code="{code}" data-d="{d_val}" data-e="{e_val}" data-o="{o_val}" data-w="{w_val}" data-base-dd="{base_dd_pct}" data-base-q="{base_anchor_pct}" data-base-x="{base_trough_pct}" data-action="{action_val}" data-n="{grade_mult_val}" data-s="{unit_price_val}" data-level="{level_val}" data-navs='{confirmed_navs_json}' data-val-signal="{val_signal_val}" data-trend20="{trend_20d_val if trend_20d_val is not None else ''}">
+        rows.append(f'''<tr class="{row_cls}" data-code="{code}" data-d="{d_val}" data-e="{e_val}" data-o="{o_val}" data-w="{w_val}" data-base-dd="{base_dd_pct}" data-base-q="{base_anchor_pct}" data-base-x="{base_trough_pct}" data-action="{action_val}" data-n="{grade_mult_val}" data-s="{unit_price_val}" data-level="{level_val}" data-navs='{confirmed_navs_json}' data-rsi-history='{rsi_history_json}' data-val-signal="{val_signal_val}" data-trend20="{trend_20d_val if trend_20d_val is not None else ''}">
             <td class="col-cat">{f['cat']}</td>
             <td class="col-code">{code}</td>
             <td class="col-name">{f['name']}</td>
@@ -953,6 +954,9 @@ function initFunds() {{
       confirmed_navs_desc: (function() {{
         try {{ return JSON.parse(row.getAttribute('data-navs') || '[]'); }} catch (e) {{ return []; }}
       }})(),
+      rsi_history: (function() {{
+        try {{ return JSON.parse(row.getAttribute('data-rsi-history') || '[]'); }} catch (e) {{ return []; }}
+      }})(),
       val_signal: row.getAttribute('data-val-signal') || '',
       trend_20d_pct: parseFloat(row.getAttribute('data-trend20')),
       staticCells: {{
@@ -1056,6 +1060,34 @@ function calcRsiWithToday(confirmedNavsDesc, estimatedNav, period) {{
   }}
   if (losses === 0) return 100;
   return roundTo(100 - 100 / (1 + (gains / period) / (losses / period)), 1);
+}}
+
+// 盘中重算 RSI 后仍保留确认页既有的迷你趋势线；最新实时 RSI 仅替换曲线末点。
+function liveRsiLineChart(rsiHistory, liveRsi) {{
+  var history = (rsiHistory || []).filter(function(v) {{ return isFinite(v); }}).map(Number);
+  if (isFinite(liveRsi)) history = history.concat([Number(liveRsi)]).slice(-30);
+  if (history.length < 2) return '<span class="pct flat">' + (isFinite(liveRsi) ? Number(liveRsi).toFixed(1) : '—') + '</span>';
+
+  var w = 88, h = 34, left = 4, right = 2, top = 4, bottom = 4;
+  var pw = w - left - right, ph = h - top - bottom;
+  var y = function(v) {{ return top + ph - (Math.max(0, Math.min(100, v)) / 100 * ph); }};
+  var points = history.map(function(v, i) {{
+    return (left + i * pw / (history.length - 1)).toFixed(1) + ',' + y(v).toFixed(1);
+  }}).join(' ');
+  var current = isFinite(liveRsi) ? Number(liveRsi) : history[history.length - 1];
+  var color = current < 30 ? '#27ae60' : (current > 70 ? '#e74c3c' : '#4a90d9');
+  var lastX = left + pw, lastY = y(history[history.length - 1]);
+  var y30 = y(30), y50 = y(50), y70 = y(70);
+  return '<div class="rsi-wrap"><svg width="' + w + '" height="' + h + '" style="display:block;margin:0 auto;">'
+    + '<rect x="' + left + '" y="' + top + '" width="' + pw.toFixed(1) + '" height="' + ph.toFixed(1) + '" fill="#f8f9fa" rx="1"/>'
+    + '<rect x="' + left + '" y="' + y30.toFixed(1) + '" width="' + pw.toFixed(1) + '" height="' + (ph - y30 + top).toFixed(1) + '" fill="#e8f5e9" opacity="0.7"/>'
+    + '<rect x="' + left + '" y="' + top + '" width="' + pw.toFixed(1) + '" height="' + (y70 - top).toFixed(1) + '" fill="#ffebee" opacity="0.7"/>'
+    + '<line x1="' + left + '" y1="' + y30.toFixed(1) + '" x2="' + (left + pw).toFixed(1) + '" y2="' + y30.toFixed(1) + '" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>'
+    + '<line x1="' + left + '" y1="' + y50.toFixed(1) + '" x2="' + (left + pw).toFixed(1) + '" y2="' + y50.toFixed(1) + '" stroke="#e0e0e0" stroke-width="0.3"/>'
+    + '<line x1="' + left + '" y1="' + y70.toFixed(1) + '" x2="' + (left + pw).toFixed(1) + '" y2="' + y70.toFixed(1) + '" stroke="#bdbdbd" stroke-width="0.5" stroke-dasharray="2,2"/>'
+    + '<polyline points="' + points + '" fill="none" stroke="' + color + '" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>'
+    + '<circle cx="' + lastX.toFixed(1) + '" cy="' + lastY.toFixed(1) + '" r="1.8" fill="' + color + '" stroke="#fff" stroke-width="0.5"/>'
+    + '</svg></div>';
 }}
 
 function getLiveLevel(drawdownPct) {{
@@ -1168,6 +1200,8 @@ function updateCell(fd, data, snapshotFund, regimeParams) {{
   var liveInputs = snapshotFund || {{}};
   var confirmedNavs = liveInputs.confirmed_navs_desc || fd.confirmed_navs_desc || [];
   var liveRsi = calcRsiWithToday(confirmedNavs, estNav, 14);
+  // 优先使用确认层已有 RSI 序列，盘中实时 RSI 作为末点追加到迷你趋势图。
+  var rsiHistory = fd.rsi_history || [];
   var liveRsiSignal = getRsiSignal(liveRsi);
   var roundedDD = roundTo(newDD, 1);
   var liveLevel = getLiveLevel(roundedDD);
@@ -1176,8 +1210,8 @@ function updateCell(fd, data, snapshotFund, regimeParams) {{
   var liveAdvice = getLiveAdvice(roundedDD, liveRsi, liveValSignal, liveTrend, regimeParams);
   var rsiCell = row.querySelector('.live-rsi');
   if (rsiCell) {{
-    rsiCell.innerHTML = '<div class="rsi-cell-wrap"><span class="pct ' + (liveRsi < 30 ? 'down' : (liveRsi > 70 ? 'up' : 'flat')) + ' live-est">'
-      + (liveRsi === null ? '—' : liveRsi.toFixed(1)) + '</span><div class="rsi-sig-inline"><span class="rsi-badge ' + rsiBadgeClass(liveRsiSignal) + '">' + liveRsiSignal + '</span></div></div>';
+    rsiCell.innerHTML = '<div class="rsi-cell-wrap">' + liveRsiLineChart(rsiHistory, liveRsi)
+      + '<div class="rsi-sig-inline"><span class="rsi-badge ' + rsiBadgeClass(liveRsiSignal) + '">' + liveRsiSignal + '</span></div></div>';
     rsiCell.setAttribute('data-live', '1');
   }}
   var actionCell = row.querySelector('.live-action');
