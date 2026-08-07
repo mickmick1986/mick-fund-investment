@@ -1351,11 +1351,13 @@ function mainLoop() {{
 
   if (mode === 'fast') {{
     if (statusEl) {{ statusEl.textContent = '⚡实时 1min'; statusEl.style.color = '#E67E22'; }}
+    if (timerEl) timerEl.textContent = '1分钟';
     updateAllFunds();
     setTimeout(mainLoop, LIVE_INTERVAL);
     countdown = COUNTDOWN_START;
   }} else if (mode === 'slow') {{
     if (statusEl) {{ statusEl.textContent = '🔄盘中 10min'; statusEl.style.color = '#3498db'; }}
+    if (timerEl) timerEl.textContent = '10分钟';
     updateAllFunds();
     setTimeout(mainLoop, SLOW_INTERVAL);
     countdown = COUNTDOWN_START;
@@ -1419,7 +1421,7 @@ document.addEventListener('DOMContentLoaded', function() {{
 <div class="top-bar">
   <div>
     <span class="main-title">【{date_str}补仓指导】</span>
-    <span style="font-size:11px;opacity:0.7;margin-left:12px;"><span id="live-status" style="margin-right:8px;">⏳盘后</span>⏱ <span id="refresh-timer">60</span>秒后刷新</span>
+    <span style="font-size:11px;opacity:0.7;margin-left:12px;"><span id="live-status" style="margin-right:8px;">⏳盘后</span>⏱ 每 <span id="refresh-timer">60</span> 检查</span>
     <span class="stats">{len(funds)}只基金 -- 需补仓<span class="highlight">{need_buy_count}</span>只 -- 共<span class="highlight">{total_shares:,.0f}</span>份 -- ¥<span class="highlight">{total_amount:,.0f}</span></span>
   </div>
   <div id="live-snapshot-time" style="font-size:12px;opacity:0.85;">确认数据: {update_time}</div>
