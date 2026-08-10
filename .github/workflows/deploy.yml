@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - 'deploy/**'
+      - 'rsi_dual_track.py'
+      - 'generate_rsi_dual_track_html.py'
       - '.github/workflows/deploy.yml'
   workflow_dispatch:
 

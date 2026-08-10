@@ -25,10 +25,16 @@ TRACKED_PATHS = [
     "enrich_fund_data_v2.py",
     "fill_excel_combined.py",
     "fetch_live_estimates.py",
+    "rsi_dual_track.py",
+    "generate_rsi_dual_track_html.py",
+    "rsi_dual_track_validation.json",
+    "rsi_dual_track_history.json",
     "fund_data_enriched.json",
     "金字塔丛林补仓指导图.html",
     "deploy/index.html",
     "deploy/live_estimates.json",
+    "deploy/rsi_dual_track_validation.json",
+    "deploy/rsi_dual_track_comparison.html",
 ]
 
 
@@ -50,6 +56,16 @@ def main() -> int:
     if not SOURCE_HTML.is_file():
         print(f"缺少待发布文件：{SOURCE_HTML.name}", file=sys.stderr)
         return 2
+
+    # 独立双轨验证始终在正式页面发布前刷新：只读取确认层/Excel，绝不改写正式决策或止盈锚点。
+    for script_name in ("rsi_dual_track.py", "generate_rsi_dual_track_html.py"):
+        generated = subprocess.run(
+            [sys.executable, str(ROOT / script_name)], cwd=ROOT, text=True,
+            encoding="utf-8", errors="replace", capture_output=True,
+        )
+        if generated.returncode != 0:
+            print(f"双轨验证生成失败({script_name})：{generated.stdout}{generated.stderr}", file=sys.stderr)
+            return generated.returncode
 
     PAGES_HTML.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(SOURCE_HTML, PAGES_HTML)
