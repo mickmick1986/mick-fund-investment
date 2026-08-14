@@ -16,6 +16,24 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36",
     "Referer": "https://finance.sina.com.cn/",
 }
+STATUS_DIR = ROOT / ".workbuddy"
+STATUS_PATH = STATUS_DIR / "live_estimates_status.json"
+STATUS_HISTORY_PATH = STATUS_DIR / "live_estimates_status.jsonl"
+
+
+def write_status(stage: str, outcome: str, **details: object) -> None:
+    """Keep local machine-readable diagnostics outside the published data path."""
+    payload = {
+        "timestamp": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "component": "fetch_live_estimates",
+        "stage": stage,
+        "outcome": outcome,
+        **details,
+    }
+    STATUS_DIR.mkdir(parents=True, exist_ok=True)
+    STATUS_PATH.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    with STATUS_HISTORY_PATH.open("a", encoding="utf-8") as history:
+        history.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
 
 def fetch_sse_index(session: requests.Session) -> dict | None:
@@ -102,7 +120,14 @@ def build_live_fund_inputs(data: dict) -> dict[str, dict]:
 
 
 def main() -> int:
-    data = json.loads(SOURCE_PATH.read_text(encoding="utf-8"))
+    write_status("start", "started", source=str(SOURCE_PATH), output=str(OUTPUT_PATH))
+    try:
+        data = json.loads(SOURCE_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        write_status("source", "failed", error=str(error))
+        print(f"Source data failed: {error}")
+        return 2
+
     codes = [str(item["code"]).zfill(6) for item in data.get("funds", [])]
     estimates: dict[str, dict] = {}
     failures: list[str] = []
@@ -133,6 +158,16 @@ def main() -> int:
         if quote.get("quote_date") != today
     ]
     if stale_quotes:
+        write_status(
+            "validate",
+            "failed",
+            reason="stale_quotes",
+            expected_trade_date=today,
+            estimate_count=len(estimates),
+            expected_count=len(codes),
+            stale_count=len(stale_quotes),
+            stale_codes=stale_quotes,
+        )
         print("Stale quotes:", ", ".join(stale_quotes))
         return 3
 
@@ -157,6 +192,17 @@ def main() -> int:
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT_PATH.write_text(
         json.dumps(snapshot, ensure_ascii=False, separators=(",", ":")), encoding="utf-8"
+    )
+    write_status(
+        "fetch_validate",
+        "success" if len(estimates) == len(codes) and sse_index else "failed",
+        trade_date=today,
+        estimate_count=len(estimates),
+        expected_count=len(codes),
+        failure_count=len(failures),
+        failed_codes=failures,
+        turnover_trillion=(sse_index or {}).get("market_turnover_trillion"),
+        snapshot_updated_at=snapshot["updated_at"],
     )
     print(f"Published {len(estimates)}/{len(codes)} estimates to {OUTPUT_PATH}")
     if failures:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+from datetime import datetime
 import subprocess
 import sys
 import tempfile
@@ -19,6 +20,24 @@ REMOTE_REF = "main"
 SNAPSHOT_REPO_PATH = "deploy/live_estimates.json"
 EXPECTED_ESTIMATE_COUNT = 25
 MAX_PUSH_ATTEMPTS = 3
+STATUS_DIR = ROOT / ".workbuddy"
+STATUS_PATH = STATUS_DIR / "live_estimates_status.json"
+STATUS_HISTORY_PATH = STATUS_DIR / "live_estimates_status.jsonl"
+
+
+def write_status(stage: str, outcome: str, **details: object) -> None:
+    """Keep local machine-readable diagnostics outside the published data path."""
+    payload = {
+        "timestamp": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "component": "publish_live_snapshot",
+        "stage": stage,
+        "outcome": outcome,
+        **details,
+    }
+    STATUS_DIR.mkdir(parents=True, exist_ok=True)
+    STATUS_PATH.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    with STATUS_HISTORY_PATH.open("a", encoding="utf-8") as history:
+        history.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
 
 def run(command: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
@@ -80,10 +99,18 @@ def verify_public_snapshot(raw_url: str, expected_updated_at: str) -> None:
         try:
             last_seen = read_snapshot(f"{raw_url}?_={int(time.time() * 1000)}").get("updated_at")
             if last_seen == expected_updated_at:
+                write_status("raw_readback", "success", expected_updated_at=expected_updated_at)
                 return
-        except (OSError, ValueError, json.JSONDecodeError):
-            pass
+        except (OSError, ValueError, json.JSONDecodeError) as error:
+            last_seen = f"error:{error}"
         time.sleep(10)
+    write_status(
+        "raw_readback",
+        "failed",
+        expected_updated_at=expected_updated_at,
+        last_seen=last_seen,
+        reason="timeout",
+    )
     raise RuntimeError(f"remote snapshot did not update within 120 seconds; last={last_seen}")
 
 
@@ -130,27 +157,60 @@ def publish_from_clean_clone(remote: str, snapshot: dict) -> tuple[int, bool]:
 
 
 def main() -> int:
+    write_status("start", "started", snapshot_path=str(SNAPSHOT_PATH))
     try:
         snapshot = validate_snapshot(SNAPSHOT_PATH)
     except (OSError, ValueError, json.JSONDecodeError) as error:
+        write_status("validate", "failed", error=str(error))
         print(f"snapshot validation failed: {error}", file=sys.stderr)
         return 2
 
+    write_status(
+        "validate",
+        "success",
+        trade_date=snapshot["trade_date"],
+        updated_at=snapshot["updated_at"],
+        estimate_count=snapshot["estimate_count"],
+        turnover_trillion=(snapshot.get("sse_index") or {}).get("market_turnover_trillion"),
+    )
+
     remote_result = run(["git", "remote", "get-url", REMOTE_NAME], ROOT)
     if remote_result.returncode:
+        write_status("remote", "failed", error=command_output(remote_result))
         return fail(remote_result)
     try:
         raw_url = get_raw_url(remote_result.stdout.strip())
     except ValueError as error:
+        write_status("remote", "failed", error=str(error))
         print(str(error), file=sys.stderr)
         return 2
 
     result, published = publish_from_clean_clone(remote_result.stdout.strip(), snapshot)
     if result:
+        write_status(
+            "push",
+            "failed",
+            trade_date=snapshot["trade_date"],
+            updated_at=snapshot["updated_at"],
+            return_code=result,
+        )
         return result
     if not published:
+        write_status(
+            "push",
+            "already_current",
+            trade_date=snapshot["trade_date"],
+            updated_at=snapshot["updated_at"],
+        )
         print(f"remote snapshot is already current: {snapshot['updated_at']}")
         return 0
+
+    write_status(
+        "push",
+        "success",
+        trade_date=snapshot["trade_date"],
+        updated_at=snapshot["updated_at"],
+    )
 
     try:
         verify_public_snapshot(raw_url, snapshot["updated_at"])
@@ -158,6 +218,13 @@ def main() -> int:
         print(str(error), file=sys.stderr)
         return 3
 
+    write_status(
+        "complete",
+        "success",
+        trade_date=snapshot["trade_date"],
+        updated_at=snapshot["updated_at"],
+        estimate_count=snapshot["estimate_count"],
+    )
     print(
         f"public snapshot updated: trade_date={snapshot['trade_date']} "
         f"updated_at={snapshot['updated_at']} estimates={snapshot['estimate_count']}"
