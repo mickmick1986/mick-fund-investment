@@ -63,23 +63,12 @@ jobs:
           print(f"validated trade_date={today} estimates=25 turnover={turnover:.2f}万亿")
           PY
 
-      - name: 提交实时估值快照
+      - name: 隔离发布实时估值快照
         if: steps.market.outputs.active == 'true'
-        id: commit
-        run: |
-          if git diff --quiet -- deploy/live_estimates.json; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add deploy/live_estimates.json
-          git commit -m "chore: 更新盘中基金估值"
-          git push
-          echo "changed=true" >> "$GITHUB_OUTPUT"
+        run: python publish_live_snapshot.py
 
       - name: 完成手动应急发布
         if: steps.market.outputs.active == 'true'
         run: |
-          echo "实时快照已提交。公开页面会优先通过 Raw JSON 读取新快照；无需触发 Pages 部署。"
+          echo "实时快照已完成隔离发布与公开 Raw 回读；无需触发 Pages 整站部署。"
 

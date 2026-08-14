@@ -25,16 +25,19 @@ TRACKED_PATHS = [
     "enrich_fund_data_v2.py",
     "fill_excel_combined.py",
     "fetch_live_estimates.py",
+    "publish_live_snapshot.py",
     "rsi_dual_track.py",
     "generate_rsi_dual_track_html.py",
+    "generate_rsi_dual_track_conclusion_html.py",
     "rsi_dual_track_validation.json",
     "rsi_dual_track_history.json",
+    "rsi_dual_track_cycle_state.json",
     "fund_data_enriched.json",
     "金字塔丛林补仓指导图.html",
     "deploy/index.html",
-    "deploy/live_estimates.json",
     "deploy/rsi_dual_track_validation.json",
     "deploy/rsi_dual_track_comparison.html",
+    "deploy/rsi_dual_track_20day_conclusion.html",
 ]
 
 
@@ -58,7 +61,11 @@ def main() -> int:
         return 2
 
     # 独立双轨验证始终在正式页面发布前刷新：只读取确认层/Excel，绝不改写正式决策或止盈锚点。
-    for script_name in ("rsi_dual_track.py", "generate_rsi_dual_track_html.py"):
+    for script_name in (
+        "rsi_dual_track.py",
+        "generate_rsi_dual_track_html.py",
+        "generate_rsi_dual_track_conclusion_html.py",
+    ):
         generated = subprocess.run(
             [sys.executable, str(ROOT / script_name)], cwd=ROOT, text=True,
             encoding="utf-8", errors="replace", capture_output=True,
@@ -69,7 +76,11 @@ def main() -> int:
 
     PAGES_HTML.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(SOURCE_HTML, PAGES_HTML)
-    run_git("add", "--", *TRACKED_PATHS)
+
+    # 20 日双轨结论相关文件在周期未满时不会生成。只暂存当前实际存在的
+    # 白名单文件，避免 `git add -- <missing-path>` 以 code 128 中断整个发布。
+    existing_paths = [path for path in TRACKED_PATHS if (ROOT / path).exists()]
+    run_git("add", "--", *existing_paths)
 
     staged = run_git("diff", "--cached", "--quiet", check=False)
     if staged.returncode == 0:
