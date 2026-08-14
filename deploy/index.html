@@ -380,8 +380,11 @@ function initFunds() {
   });
 }
 
-// 实时估值由 GitHub Actions 抓取并发布为本站同源快照，避免浏览器跨域请求被数据源拒绝。
-var LIVE_SNAPSHOT_URL = 'live_estimates.json';
+// 实时快照优先从主分支直接读取，避免每分钟提交触发 Pages 整站部署；同源文件只作为网络故障回退。
+var LIVE_SNAPSHOT_URLS = [
+  'https://raw.githubusercontent.com/mickmick1986/mick-fund-investment/main/deploy/live_estimates.json',
+  'live_estimates.json'
+];
 var liveSnapshotPromise = null;
 
 // 所有日期与交易时段均固定按中国标准时间判断，避免用户设备处于其他时区而误判为盘后或休市。
@@ -401,17 +404,23 @@ function getShanghaiClock() {
 
 function loadLiveSnapshot() {
   if (liveSnapshotPromise) return liveSnapshotPromise;
-  liveSnapshotPromise = fetch(LIVE_SNAPSHOT_URL + '?_=' + Date.now(), { cache: 'no-store' })
-    .then(function(response) {
-      if (!response.ok) throw new Error('snapshot unavailable');
-      return response.json();
-    })
-    .then(function(snapshot) {
-      var today = getShanghaiClock().date;
-      if (!snapshot || snapshot.trade_date !== today || !snapshot.estimates) return null;
-      return snapshot;
-    })
-    .catch(function() { return null; });
+  var cacheBuster = '_=' + Date.now();
+  function loadAt(index) {
+    if (index >= LIVE_SNAPSHOT_URLS.length) return Promise.resolve(null);
+    var separator = LIVE_SNAPSHOT_URLS[index].indexOf('?') >= 0 ? '&' : '?';
+    return fetch(LIVE_SNAPSHOT_URLS[index] + separator + cacheBuster, { cache: 'no-store' })
+      .then(function(response) {
+        if (!response.ok) throw new Error('snapshot unavailable');
+        return response.json();
+      })
+      .then(function(snapshot) {
+        var today = getShanghaiClock().date;
+        if (!snapshot || snapshot.trade_date !== today || !snapshot.estimates) throw new Error('snapshot stale');
+        return snapshot;
+      })
+      .catch(function() { return loadAt(index + 1); });
+  }
+  liveSnapshotPromise = loadAt(0);
   return liveSnapshotPromise;
 }
 

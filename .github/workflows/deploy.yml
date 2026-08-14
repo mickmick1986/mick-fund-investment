@@ -4,7 +4,10 @@ on:
   push:
     branches: [main]
     paths:
-      - 'deploy/**'
+      - 'deploy/index.html'
+      - 'deploy/rsi_dual_track_validation.json'
+      - 'deploy/rsi_dual_track_comparison.html'
+      - 'deploy/rsi_dual_track_20day_conclusion.html'
       - 'rsi_dual_track.py'
       - 'generate_rsi_dual_track_html.py'
       - '.github/workflows/deploy.yml'
