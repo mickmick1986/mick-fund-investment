@@ -6,10 +6,8 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
-# 内置令牌提交不会触发另一个 push 工作流，因此实时快照必须在本工作流内直接部署到 Pages。
+# 仅保留手动应急抓取与提交；盘中页面从公开 Raw 实时快照读取，禁止在此触发 Pages 整站部署。
 concurrency:
   group: live-estimates
   cancel-in-progress: false
@@ -80,17 +78,8 @@ jobs:
           git push
           echo "changed=true" >> "$GITHUB_OUTPUT"
 
-      - name: 配置 Pages
+      - name: 完成手动应急发布
         if: steps.market.outputs.active == 'true'
-        uses: actions/configure-pages@v5
-
-      - name: 上传实时页面工件
-        if: steps.market.outputs.active == 'true'
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: deploy
-
-      - name: 部署实时快照到 Pages
-        if: steps.market.outputs.active == 'true'
-        uses: actions/deploy-pages@v4
+        run: |
+          echo "实时快照已提交。公开页面会优先通过 Raw JSON 读取新快照；无需触发 Pages 部署。"
 
