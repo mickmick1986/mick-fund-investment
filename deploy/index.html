@@ -380,12 +380,52 @@ function initFunds() {
   });
 }
 
-// 实时快照优先从主分支直接读取，避免每分钟提交触发 Pages 整站部署；同源文件只作为网络故障回退。
+// Contents API 是主源：当前网络环境中 Raw 会间歇性 502；Raw 和同源文件仅作降级。
 var LIVE_SNAPSHOT_URLS = [
+  'https://api.github.com/repos/mickmick1986/mick-fund-investment/contents/deploy/live_estimates.json?ref=main',
   'https://raw.githubusercontent.com/mickmick1986/mick-fund-investment/main/deploy/live_estimates.json',
   'live_estimates.json'
 ];
+var LIVE_SNAPSHOT_TIMEOUT_MS = 12000;
+var LIVE_SNAPSHOT_MAX_AGE_MINUTES = 20;
 var liveSnapshotPromise = null;
+var liveSnapshotDiagnostics = [];
+
+function decodeGitHubContent(payload) {
+  if (!payload || payload.encoding !== 'base64' || !payload.content) return payload;
+  var binary = atob(String(payload.content).replace(/\s/g, ''));
+  var bytes = new Uint8Array(binary.length);
+  for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return JSON.parse(new TextDecoder('utf-8').decode(bytes));
+}
+
+function isFreshLiveSnapshot(snapshot) {
+  if (!snapshot || snapshot.trade_date !== getShanghaiClock().date || !snapshot.estimates) return false;
+  var mode = getRefreshMode();
+  if (mode !== 'slow' && mode !== 'fast') return true;
+  var matched = /^\d{4}-\d{2}-\d{2}\s+(\d{2}):(\d{2})/.exec(snapshot.updated_at || '');
+  if (!matched) return false;
+  var snapshotMinutes = Number(matched[1]) * 60 + Number(matched[2]);
+  var age = getShanghaiClock().minutes - snapshotMinutes;
+  return age >= 0 && age <= LIVE_SNAPSHOT_MAX_AGE_MINUTES;
+}
+
+function fetchSnapshot(url, cacheBuster) {
+  var separator = url.indexOf('?') >= 0 ? '&' : '?';
+  var controller = new AbortController();
+  var timeout = setTimeout(function() { controller.abort(); }, LIVE_SNAPSHOT_TIMEOUT_MS);
+  return fetch(url + separator + cacheBuster, { cache: 'no-store', signal: controller.signal })
+    .then(function(response) {
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      return response.json();
+    })
+    .then(function(payload) {
+      var snapshot = decodeGitHubContent(payload);
+      if (!isFreshLiveSnapshot(snapshot)) throw new Error('snapshot stale');
+      return snapshot;
+    })
+    .finally(function() { clearTimeout(timeout); });
+}
 
 // 所有日期与交易时段均固定按中国标准时间判断，避免用户设备处于其他时区而误判为盘后或休市。
 function getShanghaiClock() {
@@ -405,20 +445,19 @@ function getShanghaiClock() {
 function loadLiveSnapshot() {
   if (liveSnapshotPromise) return liveSnapshotPromise;
   var cacheBuster = '_=' + Date.now();
+  liveSnapshotDiagnostics = [];
   function loadAt(index) {
     if (index >= LIVE_SNAPSHOT_URLS.length) return Promise.resolve(null);
-    var separator = LIVE_SNAPSHOT_URLS[index].indexOf('?') >= 0 ? '&' : '?';
-    return fetch(LIVE_SNAPSHOT_URLS[index] + separator + cacheBuster, { cache: 'no-store' })
-      .then(function(response) {
-        if (!response.ok) throw new Error('snapshot unavailable');
-        return response.json();
-      })
+    var source = LIVE_SNAPSHOT_URLS[index];
+    return fetchSnapshot(source, cacheBuster)
       .then(function(snapshot) {
-        var today = getShanghaiClock().date;
-        if (!snapshot || snapshot.trade_date !== today || !snapshot.estimates) throw new Error('snapshot stale');
+        liveSnapshotDiagnostics.push({ source: source, outcome: 'success', updated_at: snapshot.updated_at });
         return snapshot;
       })
-      .catch(function() { return loadAt(index + 1); });
+      .catch(function(error) {
+        liveSnapshotDiagnostics.push({ source: source, outcome: 'failed', reason: String(error && error.message || error) });
+        return loadAt(index + 1);
+      });
   }
   liveSnapshotPromise = loadAt(0);
   return liveSnapshotPromise;
@@ -742,6 +781,9 @@ async function updateAllFunds() {
   if (liveTimeEl && snapshot && snapshot.updated_at) {
     liveTimeEl.textContent = '实时快照: ' + snapshot.updated_at;
     liveTimeEl.style.color = '#dbeeff';
+  } else if (liveTimeEl) {
+    liveTimeEl.textContent = '实时快照不可用，保留确认数据';
+    liveTimeEl.style.color = '#ffd6d6';
   }
 }
 
