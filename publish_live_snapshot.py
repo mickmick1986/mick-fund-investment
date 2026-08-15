@@ -2,14 +2,16 @@
 """Publish a validated intraday snapshot from a clean clone of origin/main."""
 from __future__ import annotations
 
+import base64
 import json
 import os
 import shutil
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import subprocess
 import sys
 import tempfile
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -18,11 +20,32 @@ SNAPSHOT_PATH = ROOT / "deploy" / "live_estimates.json"
 REMOTE_NAME = "origin"
 REMOTE_REF = "main"
 SNAPSHOT_REPO_PATH = "deploy/live_estimates.json"
+CHINA_TZ = timezone(timedelta(hours=8))
 EXPECTED_ESTIMATE_COUNT = 25
+MAX_SNAPSHOT_AGE_MINUTES = 20
 MAX_PUSH_ATTEMPTS = 3
+CONTENTS_API_TIMEOUT = 30
 STATUS_DIR = ROOT / ".workbuddy"
 STATUS_PATH = STATUS_DIR / "live_estimates_status.json"
 STATUS_HISTORY_PATH = STATUS_DIR / "live_estimates_status.jsonl"
+
+
+def resolve_git_executable() -> str:
+    """Prefer GitHub Desktop's Git so scheduled publishing reuses its login."""
+    roots = []
+    if os.environ.get("LOCALAPPDATA"):
+        roots.append(Path(os.environ["LOCALAPPDATA"]) / "GitHubDesktop")
+    roots.append(Path.home() / "AppData" / "Local" / "GitHubDesktop")
+    for desktop_root in roots:
+        desktop_git = sorted(
+            desktop_root.glob("app-*/resources/app/git/cmd/git.exe"), reverse=True
+        )
+        if desktop_git:
+            return str(desktop_git[0])
+    return shutil.which("git") or "git"
+
+
+GIT_EXECUTABLE = resolve_git_executable()
 
 
 def write_status(stage: str, outcome: str, **details: object) -> None:
@@ -42,9 +65,22 @@ def write_status(stage: str, outcome: str, **details: object) -> None:
 
 def run(command: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
+    # GitHub Desktop keeps the user's OAuth session; use its Git client for
+    # scheduled pushes instead of the sandbox PortableGit credential helper.
     env["GIT_SSL_NO_VERIFY"] = "true"
+    if command and command[0] == "git":
+        actual_command = [
+            GIT_EXECUTABLE,
+            "-c",
+            "credential.helper=manager",
+            "-c",
+            "http.sslVerify=false",
+            *command[1:],
+        ]
+    else:
+        actual_command = command
     return subprocess.run(
-        command,
+        actual_command,
         cwd=cwd,
         env=env,
         text=True,
@@ -62,15 +98,36 @@ def validate_snapshot(path: Path) -> dict:
     snapshot = json.loads(path.read_text(encoding="utf-8"))
     estimates = snapshot.get("estimates") or {}
     turnover = (snapshot.get("sse_index") or {}).get("market_turnover_trillion")
-    if not snapshot.get("trade_date") or not snapshot.get("updated_at"):
+    trade_date = snapshot.get("trade_date")
+    updated_at = snapshot.get("updated_at")
+    if not trade_date or not updated_at:
         raise ValueError("snapshot is missing date metadata")
+    try:
+        now = datetime.now(CHINA_TZ)
+        expected_today = now.date().isoformat()
+        parsed_updated_at = datetime.strptime(updated_at, "%Y-%m-%d %H:%M:%S")
+    except ValueError as error:
+        raise ValueError("snapshot updated_at format is invalid") from error
+    if trade_date != expected_today or parsed_updated_at.date().isoformat() != trade_date:
+        raise ValueError("snapshot trade_date or updated_at is not today")
+    snapshot_age = now - parsed_updated_at.replace(tzinfo=CHINA_TZ)
+    if not timedelta(0) <= snapshot_age <= timedelta(minutes=MAX_SNAPSHOT_AGE_MINUTES):
+        raise ValueError("snapshot updated_at is outside the publish freshness window")
     if snapshot.get("estimate_count") != EXPECTED_ESTIMATE_COUNT:
         raise ValueError("snapshot estimate_count is invalid")
     if len(estimates) != EXPECTED_ESTIMATE_COUNT:
         raise ValueError("snapshot estimates are incomplete")
-    if not isinstance(turnover, (int, float)):
-        raise ValueError("snapshot turnover is missing")
+    if not isinstance(turnover, (int, float)) or turnover <= 0:
+        raise ValueError("snapshot turnover is invalid")
     return snapshot
+
+
+def get_github_repo(remote: str) -> str:
+    if remote.startswith("https://github.com/"):
+        return remote.removeprefix("https://github.com/").removesuffix(".git")
+    if remote.startswith("git@github.com:"):
+        return remote.removeprefix("git@github.com:").removesuffix(".git")
+    raise ValueError(f"unsupported remote: {remote}")
 
 
 def get_raw_url(remote: str) -> str:
@@ -90,6 +147,71 @@ def read_snapshot(url: str) -> dict:
     )
     with urllib.request.urlopen(request, timeout=20) as response:
         return json.loads(response.read().decode("utf-8"))
+
+
+def contents_request(url: str, token: str, payload: dict | None = None) -> dict:
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "Authorization": f"Bearer {token}",
+        "User-Agent": "JinzitaLivePublisher/1.0",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    body = None
+    method = "GET"
+    if payload is not None:
+        method = "PUT"
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    request = urllib.request.Request(url, data=body, headers=headers, method=method)
+    with urllib.request.urlopen(request, timeout=CONTENTS_API_TIMEOUT) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def publish_via_contents_api(remote: str, snapshot: dict, token: str) -> bool:
+    """Update exactly one GitHub Contents API path with an optimistic SHA check."""
+    repo = get_github_repo(remote)
+    url = f"https://api.github.com/repos/{repo}/contents/{SNAPSHOT_REPO_PATH}?ref={REMOTE_REF}"
+    encoded = base64.b64encode(
+        json.dumps(snapshot, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    ).decode("ascii")
+    last_error = ""
+    for attempt in range(1, MAX_PUSH_ATTEMPTS + 1):
+        try:
+            current = contents_request(url, token)
+            sha = current.get("sha")
+            if not sha:
+                raise RuntimeError("GitHub Contents response is missing target SHA")
+            current_content = base64.b64decode(current.get("content", "").replace("\\n", ""))
+            if current_content == base64.b64decode(encoded):
+                write_status("contents_api", "already_current", path=SNAPSHOT_REPO_PATH)
+                return False
+            result = contents_request(
+                url,
+                token,
+                {
+                    "message": f"chore: update intraday estimates {snapshot['updated_at']}",
+                    "content": encoded,
+                    "sha": sha,
+                    "branch": REMOTE_REF,
+                },
+            )
+            if result.get("content", {}).get("path") != SNAPSHOT_REPO_PATH:
+                raise RuntimeError("GitHub Contents response path mismatch")
+            write_status(
+                "contents_api",
+                "success",
+                path=SNAPSHOT_REPO_PATH,
+                remote_sha=sha,
+                commit_sha=result.get("commit", {}).get("sha"),
+            )
+            return True
+        except (OSError, ValueError, json.JSONDecodeError, RuntimeError, urllib.error.HTTPError) as error:
+            last_error = str(error)
+            if attempt < MAX_PUSH_ATTEMPTS:
+                write_status("contents_api", "retry", attempt=attempt, error=last_error)
+                continue
+    write_status("contents_api", "failed", error=last_error, path=SNAPSHOT_REPO_PATH)
+    raise RuntimeError(f"GitHub Contents API publish failed: {last_error}")
 
 
 def verify_public_snapshot(raw_url: str, expected_updated_at: str) -> None:
@@ -152,12 +274,26 @@ def publish_from_clean_clone(remote: str, snapshot: dict) -> tuple[int, bool]:
                 return 0, True
             if attempt == MAX_PUSH_ATTEMPTS:
                 return fail(pushed), False
-            print(f"push raced with another publisher; retrying ({attempt}/{MAX_PUSH_ATTEMPTS})", file=sys.stderr)
+            reason = command_output(pushed)
+            write_status(
+                "push_attempt",
+                "failed",
+                attempt=attempt,
+                trade_date=snapshot["trade_date"],
+                updated_at=snapshot["updated_at"],
+                error=reason,
+            )
+            print(f"push failed; retrying ({attempt}/{MAX_PUSH_ATTEMPTS}): {reason}", file=sys.stderr)
     return 1, False
 
 
 def main() -> int:
-    write_status("start", "started", snapshot_path=str(SNAPSHOT_PATH))
+    write_status(
+        "start",
+        "started",
+        snapshot_path=str(SNAPSHOT_PATH),
+        git_executable=GIT_EXECUTABLE,
+    )
     try:
         snapshot = validate_snapshot(SNAPSHOT_PATH)
     except (OSError, ValueError, json.JSONDecodeError) as error:
@@ -185,7 +321,18 @@ def main() -> int:
         print(str(error), file=sys.stderr)
         return 2
 
-    result, published = publish_from_clean_clone(remote_result.stdout.strip(), snapshot)
+    remote = remote_result.stdout.strip()
+    github_token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if github_token:
+        try:
+            published = publish_via_contents_api(remote, snapshot, github_token)
+            result = 0
+        except RuntimeError as error:
+            write_status("push", "failed", error=str(error), path=SNAPSHOT_REPO_PATH)
+            print(str(error), file=sys.stderr)
+            return 1
+    else:
+        result, published = publish_from_clean_clone(remote, snapshot)
     if result:
         write_status(
             "push",
