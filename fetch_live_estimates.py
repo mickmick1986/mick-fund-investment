@@ -119,6 +119,50 @@ def build_live_fund_inputs(data: dict) -> dict[str, dict]:
     return funds
 
 
+def build_market_status(data: dict) -> dict:
+    """Expose real availability dates without presenting stale values as intraday data.
+
+    The live snapshot may carry the latest confirmed market indicators as metadata,
+    but it must explicitly preserve each indicator's own date and availability.
+    Northbound intraday net flow is intentionally null because an older confirmed
+    value must not be relabeled as today's official intraday figure.
+    """
+    regime = data.get("market_regime") or {}
+    fear = regime.get("fear_greed") or {}
+    hk = regime.get("hk_connect") or {}
+    margin = regime.get("margin_balance") or {}
+
+    south_value = hk.get("south_net")
+    south_date = hk.get("south_date") or hk.get("date")
+    margin_balance = margin.get("balance")
+    margin_balance_trillion = margin_balance / 1e4 if margin_balance is not None else None
+
+    return {
+        "fear_greed": {
+            "value": fear.get("value"),
+            "label": fear.get("label"),
+            "trade_date": fear.get("date"),
+            "availability": "latest_available" if fear.get("value") is not None else "unavailable",
+        },
+        "north_flow": {
+            "net_flow": None,
+            "trade_date": None,
+            "availability": "official_intraday_unavailable",
+        },
+        "south_flow": {
+            "net_flow": south_value,
+            "trade_date": south_date,
+            "availability": "latest_available" if south_value is not None else "unavailable",
+        },
+        "margin_balance": {
+            "balance_trillion": round(margin_balance_trillion, 4) if margin_balance_trillion is not None else None,
+            "net_buy": margin.get("net_buy"),
+            "trade_date": margin.get("date"),
+            "availability": "latest_available_t_plus_1" if margin_balance is not None else "unavailable",
+        },
+    }
+
+
 def main() -> int:
     write_status("start", "started", source=str(SOURCE_PATH), output=str(OUTPUT_PATH))
     try:
@@ -187,6 +231,7 @@ def main() -> int:
             "regime_key": regime.get("regime_key"),
             "params": regime_params,
         },
+        "market_status": build_market_status(data),
         "sse_index": sse_index,
     }
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)

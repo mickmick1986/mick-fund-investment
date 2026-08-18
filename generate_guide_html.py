@@ -554,7 +554,7 @@ def generate():
         else:
             fg_cls = 'fg-neutral'
             fg_color = '#85929E'
-        market_items.append(f'<div class="m-item"><span class="m-label">恐贪指数({fg_date})</span><span class="m-val"><span class="{fg_cls}" style="color:{fg_color}; font-weight:700;">{fg_val}</span> <span class="fg-badge {fg_cls}">{fg_label}</span></span></div>')
+        market_items.append(f'<div class="m-item"><span class="m-label" id="live-fear-greed-label">恐贪指数({fg_date})</span><span class="m-val" id="live-fear-greed"><span class="{fg_cls}" style="color:{fg_color}; font-weight:700;">{fg_val}</span> <span class="fg-badge {fg_cls}">{fg_label}</span></span></div>')
     
     # 北向/南向资金
     if hk_connect and hk_connect.get('north_net') is not None:
@@ -565,8 +565,8 @@ def generate():
         south = hk_connect['south_net']
         north_cls = 'up' if north > 0 else 'down' if north < 0 else 'flat'
         south_cls = 'up' if south > 0 else 'down' if south < 0 else 'flat'
-        market_items.append(f'<div class="m-item"><span class="m-label">北向({hk_date})</span><span class="m-val"><span class="m-change {north_cls}">{north:+.2f}亿</span></span></div>')
-        market_items.append(f'<div class="m-item"><span class="m-label">南向({hk_date})</span><span class="m-val"><span class="m-change {south_cls}">{south:+.2f}亿</span></span></div>')
+        market_items.append(f'<div class="m-item"><span class="m-label" id="live-north-flow-label">北向({hk_date})</span><span class="m-val" id="live-north-flow"><span class="m-change {north_cls}">{north:+.2f}亿</span></span></div>')
+        market_items.append(f'<div class="m-item"><span class="m-label" id="live-south-flow-label">南向({hk_date})</span><span class="m-val" id="live-south-flow"><span class="m-change {south_cls}">{south:+.2f}亿</span></span></div>')
     
     # 融资余额（与基金补仓自动化一致：加杠杆/去杠杆标签）
     if margin_balance:
@@ -589,7 +589,7 @@ def generate():
             net_buy_str = ''
         # 状态标签
         tag_str = f'<span style="color:{m_state_color}; font-weight:700;">（{m_state}；{m_meaning}）</span>' if m_state and m_meaning else ''
-        market_items.append(f'<div class="m-item"><span class="m-label">融资余额({m_date})</span><span class="m-val">{balance_str} {net_buy_str}{tag_str}</span></div>')
+        market_items.append(f'<div class="m-item"><span class="m-label" id="live-margin-balance-label">融资余额({m_date})</span><span class="m-val" id="live-margin-balance">{balance_str} {net_buy_str}{tag_str}</span></div>')
     
     market_html = '\n'.join(market_items)
     
@@ -1085,6 +1085,75 @@ function updateSseIndex(snapshot) {{
   }}
 }}
 
+function formatMarketDate(value) {{
+  if (!value) return '最新可得';
+  var text = String(value);
+  return text.length >= 10 ? text.slice(5, 10) : text;
+}}
+
+function marketFlowHtml(value) {{
+  if (!isFinite(value)) return '<span style="color:#888">暂无可靠数据</span>';
+  var number = Number(value);
+  var cls = number > 0 ? 'up' : (number < 0 ? 'down' : 'flat');
+  return '<span class="m-change ' + cls + '">' + (number >= 0 ? '+' : '') + number.toFixed(2) + '亿</span>';
+}}
+
+function updateMarketStatus(snapshot) {{
+  if (!snapshot || !snapshot.market_status) return;
+  var status = snapshot.market_status;
+  var fear = status.fear_greed || null;
+  var north = status.north_flow || null;
+  var south = status.south_flow || null;
+  var margin = status.margin_balance || null;
+
+  var fearLabel = document.getElementById('live-fear-greed-label');
+  var fearValue = document.getElementById('live-fear-greed');
+  if (fearLabel && fearValue) {{
+    var fearDate = formatMarketDate(fear.trade_date);
+    fearLabel.textContent = '恐贪指数(' + fearDate + ')';
+    if (fear.value !== null && fear.value !== undefined) {{
+      fearValue.textContent = String(fear.value) + (fear.label ? ' ' + fear.label : '');
+    }} else {{
+      fearValue.innerHTML = '<span style="color:#888">最新可得</span>';
+    }}
+  }}
+
+  var northLabel = document.getElementById('live-north-flow-label');
+  var northValue = document.getElementById('live-north-flow');
+  if (northLabel && northValue) {{
+    northLabel.textContent = '北向(' + (north && north.trade_date ? formatMarketDate(north.trade_date) : '盘中未披露') + ')';
+    northValue.innerHTML = north && north.availability === 'official_intraday_unavailable'
+      ? '<span style="color:#888">官方盘中净额未披露</span>'
+      : marketFlowHtml(north ? north.net_flow : null);
+  }}
+
+  var southLabel = document.getElementById('live-south-flow-label');
+  var southValue = document.getElementById('live-south-flow');
+  if (southLabel && southValue) {{
+    southLabel.textContent = '南向(' + (south && south.trade_date ? formatMarketDate(south.trade_date) : '最新可得') + ')';
+    southValue.innerHTML = marketFlowHtml(south ? south.net_flow : null);
+  }}
+
+  var marginLabel = document.getElementById('live-margin-balance-label');
+  var marginValue = document.getElementById('live-margin-balance');
+  if (marginLabel && marginValue) {{
+    marginLabel.textContent = '融资余额(' + (margin && margin.trade_date ? formatMarketDate(margin.trade_date) : '最新可得') + ')';
+    if (margin && isFinite(margin.balance_trillion)) {{
+      marginValue.textContent = Number(margin.balance_trillion).toFixed(2) + '万亿元';
+      if (isFinite(margin.net_buy)) marginValue.innerHTML += ' ' + marketFlowHtml(margin.net_buy);
+    }} else {{
+      marginValue.innerHTML = '<span style="color:#888">最新可得</span>';
+    }}
+  }}
+}}
+
+function updateDynamicHeader(snapshot) {{
+  if (!snapshot || !snapshot.trade_date) return;
+  document.title = '金字塔丛林补仓指导图 (' + snapshot.trade_date + ')';
+  var mainTitle = document.querySelector('.main-title');
+  if (mainTitle) mainTitle.textContent = '【' + snapshot.trade_date + '补仓指导】';
+}}
+
 function roundTo(value, decimals) {{
   var factor = Math.pow(10, decimals);
   return Math.round((value + Number.EPSILON) * factor) / factor;
@@ -1356,7 +1425,7 @@ function updateSummary() {{
     }}
   }});
   var statsEl = document.querySelector('.top-bar .stats');
-  if (statsEl && totalShares > 0) {{
+  if (statsEl) {{
     statsEl.innerHTML = funds.length + '只基金 — 需补仓<span class="highlight live-est-sum" style="background:#ffd700;color:#1e3a5f;padding:0 4px;border-radius:3px;">' + buyCount + '</span>只 — 共<span class="highlight">' + totalShares + '</span>份 — ¥<span class="highlight">' + totalAmount.toLocaleString('en-US', {{maximumFractionDigits:0}}) + '</span>';
   }}
 }}
@@ -1372,6 +1441,8 @@ async function updateAllFunds() {{
     updateCell(funds[i], estimates[funds[i].code] || null, liveFunds[funds[i].code] || null, regimeParams);
   }}
   updateSseIndex(snapshot);
+  updateDynamicHeader(snapshot);
+  updateMarketStatus(snapshot);
   updateSummary();
 
   // 顶部必须展示实际加载的实时快照时间，不能继续显示生成HTML时的确认数据更新时间。
