@@ -422,10 +422,44 @@ def safe_nav(v):
         return '—'
     return f'{n:.4f}'
 
+def assert_excel_matches_json(excel_rows, json_data):
+    """防呆：final_nav 模式下，Excel E列必须与 enriched JSON 的 latest_nav 完全一致。
+    早间管线若顺序/并发错误（generate 在 fill_excel_combined 写完前执行），
+    Excel 仍是昨日净值，会导致页面基准涨幅（data-base-q 等）整体偏差一天。
+    宁可中止失败，也不发布陈旧基准。"""
+    if json_data.get('data_mode') != 'final_nav':
+        return
+    funds = json_data.get('funds') or {}
+    if isinstance(funds, list):
+        funds = {str(f.get('code', '')).zfill(6): f for f in funds if isinstance(f, dict)}
+    if not isinstance(funds, dict):
+        return
+    mismatches = []
+    for er in excel_rows:
+        jf = funds.get(er['code'])
+        if not jf:
+            continue
+        latest = jf.get('latest_nav')
+        e = er.get('e_val')
+        if latest is None or e is None:
+            mismatches.append((er['code'], e, latest))
+            continue
+        if abs(float(e) - float(latest)) > 1e-9:
+            mismatches.append((er['code'], e, latest))
+    if mismatches:
+        sample = '；'.join(f"{c}: Excel E={e} vs JSON={v}" for c, e, v in mismatches[:5])
+        raise SystemExit(
+            f"中止生成：Excel净值与 enriched JSON 不一致（{len(mismatches)}只），"
+            f"疑似 generate 在 fill_excel_combined 完成前执行。"
+            f"请先运行 fill_excel_combined.py 再重试。{sample}"
+        )
+
+
 def generate():
     json_data = load_json()
     final_nav_mode = json_data.get('data_mode') == 'final_nav'
     excel_rows = load_excel()
+    assert_excel_matches_json(excel_rows, json_data)  # 顺序防呆：Excel必须先由fill写齐
     compute_formulas(excel_rows)  # 在Python中计算G/P/Q/R/T/U/X，不依赖Excel缓存
     funds = merge_data(excel_rows, json_data)
     

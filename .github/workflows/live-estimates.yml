@@ -74,7 +74,14 @@ jobs:
           assert len(snapshot.get("estimates", {})) == 25
           turnover = (snapshot.get("sse_index") or {}).get("market_turnover_trillion")
           assert isinstance(turnover, (int, float)) and turnover > 0, turnover
-          print(f"validated path=deploy/live_estimates.json trade_date={today} estimates=25 turnover={turnover:.2f}万亿")
+          market_status = snapshot.get("market_status")
+          assert isinstance(market_status, dict), "market_status must be an object"
+          for key in ("fear_greed", "north_flow", "south_flow", "margin_balance"):
+              item = market_status.get(key)
+              assert isinstance(item, dict), f"market_status.{key} must be an object"
+              assert isinstance(item.get("availability"), str) and item["availability"], key
+              assert item.get("trade_date") is None or isinstance(item.get("trade_date"), str), key
+          print(f"validated path=deploy/live_estimates.json trade_date={today} estimates=25 turnover={turnover:.2f}万亿 market_status=4项")
           PY
 
       - name: 受控发布唯一快照文件

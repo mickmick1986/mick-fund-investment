@@ -28,6 +28,23 @@ CONTENTS_API_TIMEOUT = 30
 STATUS_DIR = ROOT / ".workbuddy"
 STATUS_PATH = STATUS_DIR / "live_estimates_status.json"
 STATUS_HISTORY_PATH = STATUS_DIR / "live_estimates_status.jsonl"
+# ===== 2B CloudBase 镜像（默认关闭）=====
+# 置 CLOUDBASE_MIRROR=1 后，发布器在 GitHub 主发布之外，把同一份已通过
+# 全部校验的快照镜像到 CloudBase 静态托管，供读取网关（live-estimates-api
+# 云函数）带 CORS 头对外提供。镜像失败不影响 GitHub 主发布的退出码。
+CLOUDBASE_MIRROR = os.environ.get("CLOUDBASE_MIRROR", "").strip().lower() in ("1", "true", "yes")
+CLOUDBASE_ENV_ID = os.environ.get("CLOUDBASE_ENV_ID", "jungle-fund-test-d8e7y4r16df2983")
+CLOUDBASE_APP_ID = os.environ.get("CLOUDBASE_APP_ID", "1301771822")
+CLOUDBASE_HOSTING_PATH = os.environ.get("CLOUDBASE_HOSTING_PATH", "live_estimates.json")
+CLOUDBASE_HOSTING_URL = os.environ.get(
+    "CLOUDBASE_HOSTING_URL",
+    f"https://{CLOUDBASE_ENV_ID}-{CLOUDBASE_APP_ID}.tcloudbaseapp.com/{CLOUDBASE_HOSTING_PATH}",
+)
+TCB_CLI_PATH = os.environ.get(
+    "TCB_CLI_PATH",
+    r"C:/Users/13697/.workbuddy/binaries/node/workspace/node_modules/.bin/tcb.cmd",
+)
+CLOUDBASE_MIRROR_VERIFY_TIMEOUT = 60
 
 
 def resolve_git_executable() -> str:
@@ -119,6 +136,21 @@ def validate_snapshot(path: Path) -> dict:
         raise ValueError("snapshot estimates are incomplete")
     if not isinstance(turnover, (int, float)) or turnover <= 0:
         raise ValueError("snapshot turnover is invalid")
+
+    market_status = snapshot.get("market_status")
+    if not isinstance(market_status, dict):
+        raise ValueError("snapshot market_status is missing or invalid")
+    for key in ("fear_greed", "north_flow", "south_flow", "margin_balance"):
+        item = market_status.get(key)
+        if not isinstance(item, dict):
+            raise ValueError(f"snapshot market_status.{key} is missing or invalid")
+        availability = item.get("availability")
+        if not isinstance(availability, str) or not availability:
+            raise ValueError(f"snapshot market_status.{key}.availability is invalid")
+        trade_date = item.get("trade_date")
+        if trade_date is not None and not isinstance(trade_date, str):
+            raise ValueError(f"snapshot market_status.{key}.trade_date is invalid")
+
     return snapshot
 
 
@@ -236,6 +268,66 @@ def verify_public_snapshot(raw_url: str, expected_updated_at: str) -> None:
     raise RuntimeError(f"remote snapshot did not update within 120 seconds; last={last_seen}")
 
 
+def publish_cloudbase_mirror(snapshot: dict) -> bool:
+    """把同一份已验证快照镜像到 CloudBase 静态托管（2B 双写比对阶段）。
+
+    只镜像本地已通过 validate_snapshot 的 deploy/live_estimates.json，云端不做
+    任何采集；失败只记录状态，不影响 GitHub 主发布。返回是否推送成功。
+    """
+    if not CLOUDBASE_MIRROR:
+        return False
+    command = [TCB_CLI_PATH]
+    if TCB_CLI_PATH.lower().endswith(".cmd"):
+        command = ["cmd", "/c", TCB_CLI_PATH]
+    result = subprocess.run(
+        command
+        + [
+            "hosting",
+            "deploy",
+            str(SNAPSHOT_PATH),
+            CLOUDBASE_HOSTING_PATH,
+            "-e",
+            CLOUDBASE_ENV_ID,
+            "--yes",
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=120,
+    )
+    output = (result.stdout + result.stderr).strip()
+    if result.returncode != 0 or "deployment successful" not in output:
+        write_status("cloudbase_mirror", "failed", return_code=result.returncode, error=output[-400:])
+        print(f"cloudbase mirror deploy failed: {output[-400:]}", file=sys.stderr)
+        return False
+    # 静态托管为 no-store，回读应立即可见；仍留出短暂传播窗口。
+    deadline = time.monotonic() + CLOUDBASE_MIRROR_VERIFY_TIMEOUT
+    last_seen = None
+    while time.monotonic() < deadline:
+        try:
+            last_seen = read_snapshot(f"{CLOUDBASE_HOSTING_URL}?_={int(time.time() * 1000)}").get("updated_at")
+            if last_seen == snapshot.get("updated_at"):
+                write_status(
+                    "cloudbase_mirror",
+                    "success",
+                    updated_at=snapshot["updated_at"],
+                    url=CLOUDBASE_HOSTING_URL,
+                )
+                return True
+        except (OSError, ValueError, json.JSONDecodeError) as error:
+            last_seen = f"error:{error}"
+        time.sleep(5)
+    write_status(
+        "cloudbase_mirror",
+        "verify_failed",
+        expected_updated_at=snapshot.get("updated_at"),
+        last_seen=last_seen,
+    )
+    print(f"cloudbase mirror readback mismatch: last={last_seen}", file=sys.stderr)
+    return False
+
+
 def fail(result: subprocess.CompletedProcess[str]) -> int:
     print(command_output(result), file=sys.stderr)
     return result.returncode or 1
@@ -309,6 +401,10 @@ def main() -> int:
         estimate_count=snapshot["estimate_count"],
         turnover_trillion=(snapshot.get("sse_index") or {}).get("market_turnover_trillion"),
     )
+
+    # 2B 镜像（可选，默认关闭）：GitHub 主发布之外双写 CloudBase。
+    if CLOUDBASE_MIRROR:
+        publish_cloudbase_mirror(snapshot)
 
     remote_result = run(["git", "remote", "get-url", REMOTE_NAME], ROOT)
     if remote_result.returncode:
