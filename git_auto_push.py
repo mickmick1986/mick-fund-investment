@@ -31,18 +31,9 @@ TRACKED_PATHS = [
     "fill_excel_combined.py",
     "fetch_live_estimates.py",
     "publish_live_snapshot.py",
-    "rsi_dual_track.py",
-    "generate_rsi_dual_track_html.py",
-    "generate_rsi_dual_track_conclusion_html.py",
-    "rsi_dual_track_validation.json",
-    "rsi_dual_track_history.json",
-    "rsi_dual_track_cycle_state.json",
     "fund_data_enriched.json",
     "金字塔丛林补仓指导图.html",
     "deploy/index.html",
-    "deploy/rsi_dual_track_validation.json",
-    "deploy/rsi_dual_track_comparison.html",
-    "deploy/rsi_dual_track_20day_conclusion.html",
 ]
 
 
@@ -151,7 +142,7 @@ def publish_via_git_data_api(token: str, paths: list[str], message: str) -> tupl
     """用 Git Data API 原子提交全部发布产物，完全绕开本地 git 对象。
 
     相比 Contents API 单文件直推的优势：
-      - 一次提交多个文件，避免"页面更新了但 RSI 数据没更新"的半成品状态；
+      - 一次提交多个文件，避免"页面更新了但数据文件没更新"的半成品状态；
       - 与远端 tree 做 blob SHA 比对，无变化的文件自动跳过，不产生空提交；
       - 不读取本地 .git，天然免疫本地对象损坏问题。
     """
@@ -286,28 +277,17 @@ def main() -> int:
         print(f"缺少待发布文件：{SOURCE_HTML.name}", file=sys.stderr)
         return 2
 
-    # 独立双轨验证始终在正式页面发布前刷新：只读取确认层/Excel，绝不改写正式决策或止盈锚点。
-    for script_name in (
-        "rsi_dual_track.py",
-        "generate_rsi_dual_track_html.py",
-        "generate_rsi_dual_track_conclusion_html.py",
-    ):
-        generated = subprocess.run(
-            [sys.executable, str(ROOT / script_name)], cwd=ROOT, text=True,
-            encoding="utf-8", errors="replace", capture_output=True,
-        )
-        if generated.returncode != 0:
-            print(f"双轨验证生成失败({script_name})：{generated.stdout}{generated.stderr}", file=sys.stderr)
-            return generated.returncode
+    # RSI 双轨验证已于 2026-09-27 结案（保留简单平均 RSI(14)，不切换 Wilder），
+    # 相关脚本与产物已从本管线移除，不再在发布前串行生成。
 
     PAGES_HTML.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(SOURCE_HTML, PAGES_HTML)
 
     message = f"chore: 更新基金数据 {datetime.now():%Y-%m-%d %H:%M}"
 
-    # 主通道：Git Data API 原子提交全部发布产物（主页面 + RSI 对比页 + RSI 数据）。
-    # 2026-09-27 改造：原先只推 deploy/index.html，导致 RSI 页面/数据依赖本地 git，
-    # 而本地 git 对象反复损坏 → 远端 RSI 对比页长期停留在旧版本。
+    # 主通道：Git Data API 原子提交全部发布产物（主页面 + 数据文件）。
+    # 2026-09-27 改造：原先只推 deploy/index.html，导致其余产物依赖本地 git，
+    # 而本地 git 对象反复损坏 → 远端文件长期停留在旧版本。
     token = get_github_token()
     api_ok = False
     if token:

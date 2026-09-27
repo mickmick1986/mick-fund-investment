@@ -1874,8 +1874,8 @@ def main():
         # RSI历史序列（用于折线图）—— 从确认净值计算。
         # recent_navs 按 newest→oldest 排列；当前确认净值 RSI 必须与折线末值同源。
         rsi_history = None
-        # 保留完整45个确认净值点：正式简单RSI仍只取最近15点，
-        # 但独立Wilder验证需要更长的平滑暖机历史。该字段不参与Excel公式或止盈锚点写入。
+        # 保留45个确认净值点：正式简单RSI只取最近15点，盘中重算与20日趋势判断均在此长度内。
+        # 该字段不参与Excel公式或止盈锚点写入。
         confirmed_navs_desc = recent_navs[:45] if recent_navs else []
         if recent_navs:
             navs_old_to_new = list(reversed(recent_navs))
