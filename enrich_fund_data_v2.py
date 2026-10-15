@@ -20,6 +20,7 @@ import json
 import os
 import re
 import requests
+import shutil
 import time
 import subprocess
 import hashlib
@@ -404,14 +405,83 @@ def calc_rsi_from_closes(closes, period=14):
 
 
 # ===== 韭圈儿恐贪指数解密脚本路径 =====
+def _resolve_node_bin():
+    """解析可用的 Node 可执行文件，不写死版本号。
+
+    背景（2026-10-15 修复）：WorkBuddy 升级会在 binaries/node/versions/ 下重建
+    带 build 后缀的目录（22.22.2 → 22.22.2-6）。旧写法把版本号写死，路径失效后
+    subprocess 抛 FileNotFoundError，又被 except 静默吞掉 —— 结果是恐贪指数长期
+    悄悄变成 unavailable，页面上只显示灰色「最新可得」，没有任何报错。
+    按「环境变量 → PATH → versions/current → 任意版本目录 → 系统安装」逐级回退。
+    """
+    candidates = []
+
+    env_bin = os.environ.get('WORKBUDDY_NODE_BIN') or os.environ.get('NODE_BIN')
+    if env_bin:
+        candidates.append(env_bin)
+
+    which = shutil.which('node') or shutil.which('node.exe')
+    if which:
+        candidates.append(which)
+
+    versions_dir = os.path.join(
+        os.path.expanduser('~'), '.workbuddy', 'binaries', 'node', 'versions'
+    )
+    # versions/current 里记录当前版本目录名
+    try:
+        cur_file = os.path.join(versions_dir, 'current')
+        if os.path.isfile(cur_file):
+            with open(cur_file, encoding='utf-8') as f:
+                name = f.read().strip()
+            if name:
+                candidates.append(os.path.join(versions_dir, name, 'node.exe'))
+    except Exception:
+        pass
+
+    # versions/ 下任意版本目录（新版本优先）
+    try:
+        if os.path.isdir(versions_dir):
+            for name in sorted(os.listdir(versions_dir), reverse=True):
+                p = os.path.join(versions_dir, name)
+                if os.path.isdir(p) and not name.startswith('.'):
+                    candidates.append(os.path.join(p, 'node.exe'))
+    except Exception:
+        pass
+
+    candidates.append(r'C:\Program Files\nodejs\node.exe')
+
+    for c in candidates:
+        if c and os.path.exists(c):
+            return c
+    return None
+
+
+def _resolve_node_path():
+    """解析能提供 crypto-js 的 node_modules 目录。"""
+    candidates = [
+        os.path.join(
+            os.path.expanduser('~'), '.workbuddy', 'binaries', 'node', 'workspace', 'node_modules'
+        ),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), 'node_modules'),
+    ]
+    for c in candidates:
+        if os.path.isdir(os.path.join(c, 'crypto-js')):
+            return c
+    return candidates[0]
+
+
+_JQ_NODE_BIN = _resolve_node_bin()
+_JQ_NODE_PATH = _resolve_node_path()
+
 if _CI_MODE:
     _JQ_DECRYPT_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'decrypt_helper.js')
-    _JQ_NODE_BIN = 'node'
-    _JQ_NODE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'node_modules')
 else:
-    _JQ_DECRYPT_SCRIPT = r'C:\Users\13697\WorkBuddy\2026-06-20-18-01-34\decrypt_helper.js'
-    _JQ_NODE_BIN = r'C:\Users\13697\.workbuddy\binaries\node\versions\22.22.2\node.exe'
-    _JQ_NODE_PATH = r'C:\Users\13697\.workbuddy\binaries\node\workspace\node_modules'
+    # 优先当前工作区的副本；两者内容一致（sha 相同），保留历史目录作回退
+    _JQ_LOCAL_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'decrypt_helper.js')
+    _JQ_LEGACY_SCRIPT = r'C:\Users\13697\WorkBuddy\2026-06-20-18-01-34\decrypt_helper.js'
+    _JQ_DECRYPT_SCRIPT = (
+        _JQ_LOCAL_SCRIPT if os.path.exists(_JQ_LOCAL_SCRIPT) else _JQ_LEGACY_SCRIPT
+    )
 _JQ_SECRET_KEY = 'flkjer45#f54trg2d1r54'
 _JQ_TEMP_ENCRYPTED = os.path.join(os.path.dirname(os.path.abspath(__file__)), '_jq_temp_encrypted.txt')
 _JQ_TEMP_DECRYPTED = os.path.join(os.path.dirname(os.path.abspath(__file__)), '_jq_temp_decrypted.json')
@@ -469,7 +539,17 @@ def _sign_jiucaishuo(data):
 
 
 def _decrypt_with_node(encrypted_text):
-    """使用Node.js + crypto-js解密韭圈儿加密数据"""
+    """使用Node.js + crypto-js解密韭圈儿加密数据
+
+    所有失败路径都必须打印原因：历史上这里用裸 except 吞掉 FileNotFoundError，
+    导致恐贪指数静默失效数月而无人察觉（2026-10-15 修复）。
+    """
+    if not _JQ_NODE_BIN or not os.path.exists(_JQ_NODE_BIN):
+        print(f"  [市场状态] 恐贪指数解密跳过: Node 可执行文件不可用 ({_JQ_NODE_BIN})")
+        return None
+    if not os.path.exists(_JQ_DECRYPT_SCRIPT):
+        print(f"  [市场状态] 恐贪指数解密跳过: 解密脚本不存在 ({_JQ_DECRYPT_SCRIPT})")
+        return None
     try:
         with open(_JQ_TEMP_ENCRYPTED, 'w', encoding='utf-8') as f:
             f.write(encrypted_text)
@@ -480,6 +560,8 @@ def _decrypt_with_node(encrypted_text):
             capture_output=True, text=True, env=env, timeout=30
         )
         if result.returncode != 0:
+            detail = (result.stderr or result.stdout or '').strip().replace('\n', ' ')[:200]
+            print(f"  [市场状态] 恐贪指数解密失败 (rc={result.returncode}): {detail}")
             return None
         with open(_JQ_TEMP_DECRYPTED, 'r', encoding='utf-8') as f:
             data = json.load(f)
@@ -489,7 +571,8 @@ def _decrypt_with_node(encrypted_text):
         except:
             pass
         return data
-    except Exception:
+    except Exception as e:
+        print(f"  [市场状态] 恐贪指数解密异常: {type(e).__name__}: {e}")
         return None
 
 
