@@ -172,6 +172,11 @@ def get_raw_url(remote: str) -> str:
     return f"https://raw.githubusercontent.com/{repo}/{REMOTE_REF}/{SNAPSHOT_REPO_PATH}"
 
 
+def get_contents_api_url(remote: str) -> str:
+    repo = get_github_repo(remote)
+    return f"https://api.github.com/repos/{repo}/contents/{SNAPSHOT_REPO_PATH}?ref={REMOTE_REF}"
+
+
 def read_snapshot(url: str) -> dict:
     request = urllib.request.Request(
         url,
@@ -246,17 +251,44 @@ def publish_via_contents_api(remote: str, snapshot: dict, token: str) -> bool:
     raise RuntimeError(f"GitHub Contents API publish failed: {last_error}")
 
 
-def verify_public_snapshot(raw_url: str, expected_updated_at: str) -> None:
+def extract_updated_at(payload: object) -> str | None:
+    """Accept either a raw snapshot object or a GitHub Contents API envelope."""
+    if isinstance(payload, dict) and payload.get("encoding") == "base64" and payload.get("content"):
+        try:
+            decoded = base64.b64decode(str(payload["content"]).replace("\\n", ""))
+            payload = json.loads(decoded.decode("utf-8"))
+        except (ValueError, json.JSONDecodeError):
+            return None
+    if isinstance(payload, dict):
+        updated_at = payload.get("updated_at")
+        return updated_at if isinstance(updated_at, str) else None
+    return None
+
+
+def verify_public_snapshot(contents_url: str, raw_url: str, expected_updated_at: str) -> None:
+    """Confirm the public snapshot really carries the expected frame before exiting 0.
+
+    Verification order is Contents API first, Raw second: api.github.com stays
+    reachable from networks where raw.githubusercontent.com is reset, and the
+    Contents envelope is decoded locally. Fail-closed semantics are unchanged —
+    if neither source ever shows the expected updated_at, this still raises.
+    """
     deadline = time.monotonic() + 120
     last_seen = None
     while time.monotonic() < deadline:
-        try:
-            last_seen = read_snapshot(f"{raw_url}?_={int(time.time() * 1000)}").get("updated_at")
-            if last_seen == expected_updated_at:
-                write_status("raw_readback", "success", expected_updated_at=expected_updated_at)
-                return
-        except (OSError, ValueError, json.JSONDecodeError) as error:
-            last_seen = f"error:{error}"
+        for label, url in (("contents_api", contents_url), ("raw", raw_url)):
+            try:
+                last_seen = extract_updated_at(read_snapshot(f"{url}?_={int(time.time() * 1000)}"))
+                if last_seen == expected_updated_at:
+                    write_status(
+                        "raw_readback",
+                        "success",
+                        expected_updated_at=expected_updated_at,
+                        source=label,
+                    )
+                    return
+            except (OSError, ValueError, json.JSONDecodeError) as error:
+                last_seen = f"error:{error}"
         time.sleep(10)
     write_status(
         "raw_readback",
@@ -416,6 +448,12 @@ def main() -> int:
         write_status("remote", "failed", error=str(error))
         print(str(error), file=sys.stderr)
         return 2
+    try:
+        contents_url = get_contents_api_url(remote_result.stdout.strip())
+    except ValueError as error:
+        write_status("remote", "failed", error=str(error))
+        print(str(error), file=sys.stderr)
+        return 2
 
     remote = remote_result.stdout.strip()
     github_token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
@@ -456,7 +494,7 @@ def main() -> int:
     )
 
     try:
-        verify_public_snapshot(raw_url, snapshot["updated_at"])
+        verify_public_snapshot(contents_url, raw_url, snapshot["updated_at"])
     except RuntimeError as error:
         print(str(error), file=sys.stderr)
         return 3
