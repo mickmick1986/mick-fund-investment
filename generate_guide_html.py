@@ -1316,21 +1316,35 @@ function actionColors(action) {{
 
 // 核心：基于实时估值重算盘中临时指标，不写回Excel或确认JSON。
 function updateCell(fd, data, snapshotFund, regimeParams) {{
-  if (!data || data.gszzl === undefined || data.gszzl === null || data.gszzl === '') return;
-  var gszzl = parseFloat(data.gszzl);  // 实时涨跌幅（百分比）
+  if (!data) return;
   var row = fd.row;
+  var changeCell = row.querySelector('.live-change');
+
+  // 0. 源端估值字段异常（估算净值被填成确认净值，且无可用兜底源）→ 明确显示「估值暂缺」。
+  //    既不伪造 0.00%，也不拿确认层旧值冒充实时值。
+  var hasEstimate = data.gszzl !== undefined && data.gszzl !== null && data.gszzl !== '';
+  if (!hasEstimate) {{
+    if (changeCell) {{
+      changeCell.innerHTML = '<span class="pct flat live-est" title="源端估值字段异常，本帧不提供估值"><span>—</span><span class="live-tag">估值暂缺</span></span>';
+      changeCell.setAttribute('data-live', '0');
+    }}
+    return;
+  }}
+
+  var gszzl = parseFloat(data.gszzl);  // 实时涨跌幅（百分比）
   var mode = getRefreshMode();
   var isAfterClose = mode === 'afterclose';
-  var statusLabel = isAfterClose ? '已收盘' : '实时';
-  var indicatorClass = isAfterClose ? '' : ' is-live';
+  var isDerived = data.src === 'idx';   // 指数×β 推算值，非源端直接估值
+  var statusLabel = isDerived ? '推算' : (isAfterClose ? '已收盘' : '实时');
+  var indicatorClass = (isAfterClose || isDerived) ? '' : ' is-live';
 
   // 1. F列-当日涨跌（实时替换；状态标签独立显示在第二行）
-  var changeCell = row.querySelector('.live-change');
   if (changeCell) {{
     var sign = gszzl >= 0 ? '+' : '';
     var cls = gszzl > 0 ? 'up' : (gszzl < 0 ? 'down' : 'flat');
     changeCell.innerHTML = '<span class="pct ' + cls + ' live-est"><span>' + sign + gszzl.toFixed(2) + '%</span><span class="live-tag"><span class="live-indicator' + indicatorClass + '"></span>' + statusLabel + '</span></span>';
     changeCell.setAttribute('data-live', '1');
+    changeCell.title = isDerived ? '指数×β 推算值（源端估值字段不可用）' : '';
   }}
 
   if (fd.nav <= 0) return;
