@@ -19,6 +19,8 @@ CONFIG_PATH = ROOT / "config" / "live_index_map.json"
 # 用环境变量控制是为了可秒级回退：任何一帧异常都能把 LIVE_EST_SOURCE_MODE 改回 legacy。
 SOURCE_MODE = os.environ.get("LIVE_EST_SOURCE_MODE", "auto").strip().lower()
 PLACEHOLDER_TOL = 1e-9
+# 允许被"降级为估值暂缺"的 stale 只数上限。超过该数量说明源端整体尚未翻日，仍整帧拒收。
+MAX_DEGRADABLE_STALE = 8
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36",
     "Referer": "https://finance.sina.com.cn/",
@@ -434,11 +436,34 @@ def main() -> int:
 
     now = datetime.now(ZoneInfo("Asia/Shanghai"))
     today = now.strftime("%Y-%m-%d")
+    # 2026-11-24 调整（原为整帧 fail-closed）：单只基金报价还没翻到当日，不再丢弃整帧。
+    # 背景：10-30~11-24 共 46 次发布失败中 45 次集中在 09:30-10:00，全是"一只 stale 挡整帧"，
+    # 正好是看盘最需要数据的半小时。现在少量 stale → 该只置 gszzl=None（页面显示「估值暂缺」），
+    # 其余基金照常发布；stale 过多说明源端整体还没翻日，仍按 fail-closed 返回 3，绝不伪造数据。
     stale_quotes = [
         code for code, quote in estimates.items()
         if quote.get("quote_date") != today
     ]
-    if stale_quotes:
+    degraded: list[str] = []
+    if stale_quotes and len(stale_quotes) <= MAX_DEGRADABLE_STALE:
+        for code in stale_quotes:
+            quote = estimates[code]
+            quote["stale_quote_date"] = quote.get("quote_date")
+            quote["gszzl"] = None
+            quote["src"] = "stale"
+            degraded.append(code)
+        write_status(
+            "validate",
+            "degraded",
+            reason="stale_quotes_degraded",
+            expected_trade_date=today,
+            estimate_count=len(estimates),
+            expected_count=len(codes),
+            degraded_count=len(degraded),
+            degraded_codes=degraded,
+        )
+        print("Stale quotes degraded to 估值暂缺:", ", ".join(degraded))
+    elif stale_quotes:
         write_status(
             "validate",
             "failed",
@@ -449,7 +474,7 @@ def main() -> int:
             stale_count=len(stale_quotes),
             stale_codes=stale_quotes,
         )
-        print("Stale quotes:", ", ".join(stale_quotes))
+        print("Stale quotes:", ", ".join(stale_quotes), f"(超过 {MAX_DEGRADABLE_STALE} 只，整帧拒收)")
         return 3
 
     regime = data.get("market_regime", {})

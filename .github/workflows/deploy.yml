@@ -5,6 +5,10 @@ on:
     branches: [main]
     paths:
       - 'deploy/index.html'
+      # 2026-11-24 起：每一帧实时快照提交也触发重建。
+      # 目的：让页面首选的同源 live_estimates.json 始终新鲜，摆脱 jsDelivr 12h 分支缓存
+      # 与 raw.githubusercontent 在国内不可达这两个老毛病。频率约 6 次/小时，在 Pages 限制内。
+      - 'deploy/live_estimates.json'
       - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
@@ -37,4 +41,29 @@ jobs:
 
       - name: 部署到 GitHub Pages
         id: deployment
+        continue-on-error: true
         uses: actions/deploy-pages@v4
+
+      # 2026-11-24 事故：artifact 已上传成功（36KB, ID 14883722695），但 deploy-pages 紧接着
+      # 查到 "Found 0 artifact(s)" 直接失败，属 GitHub 侧产物元数据索引抖动（当日首次出现，
+      # 手动重跑第二次即成功）。下面两步自动重试，避免整站一整天停在旧版本。
+      - name: 等待 GitHub 产物索引同步
+        if: steps.deployment.outcome != 'success'
+        run: |
+          echo "首次部署未成功（${{ steps.deployment.outcome }}），等待 20 秒后重试"
+          sleep 20
+
+      - name: 部署重试
+        id: deployment_retry
+        if: steps.deployment.outcome != 'success'
+        uses: actions/deploy-pages@v4
+
+      - name: 汇总部署结果
+        if: always()
+        run: |
+          echo "首次部署: ${{ steps.deployment.outcome }}"
+          echo "重试部署: ${{ steps.deployment_retry.outcome }}"
+          if [ "${{ steps.deployment.outcome }}" != "success" ] && [ "${{ steps.deployment_retry.outcome }}" != "success" ]; then
+            echo "::error::两次部署均失败，页面仍停留在旧版本，请手动重新运行本工作流"
+            exit 1
+          fi

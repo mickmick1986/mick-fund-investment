@@ -103,4 +103,4 @@ jobs:
 
       - name: 完成手动应急发布
         if: steps.market.outputs.active == 'true'
-        run: echo "实时快照已完成单文件发布与公开 Raw 回读；未触发 Pages 整站部署。"
+        run: echo "实时快照已完成单文件发布；本文件提交会触发 deploy.yml 重建 Pages，页面首选同源 live_estimates.json 因此保持新鲜。"
