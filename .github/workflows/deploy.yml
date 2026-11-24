@@ -5,11 +5,17 @@ on:
     branches: [main]
     paths:
       - 'deploy/index.html'
-      # 2026-11-24 起：每一帧实时快照提交也触发重建。
-      # 目的：让页面首选的同源 live_estimates.json 始终新鲜，摆脱 jsDelivr 12h 分支缓存
-      # 与 raw.githubusercontent 在国内不可达这两个老毛病。频率约 6 次/小时，在 Pages 限制内。
+      # 用 PAT 推送时，每帧快照提交也会直接触发本工作流。
+      # 注意：云端 publish_live_snapshot.py 用的是 github.token（GITHUB_TOKEN），
+      # GitHub 会抑制该 token 产生的 push 事件，所以真正生效的是下面的 workflow_run。
       - 'deploy/live_estimates.json'
       - '.github/workflows/deploy.yml'
+  # 2026-11-24 新增：每帧实时快照跑完后重建站点。
+  # 触发源是"运行完成"事件，不受 GITHUB_TOKEN 抑制规则影响，也无需配置 PAT。
+  # 频率约 6 次/小时（交易时段每 10 分钟一帧），在 Pages 部署限额内。
+  workflow_run:
+    workflows: ["更新盘中基金估值"]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -23,6 +29,8 @@ concurrency:
 
 jobs:
   deploy:
+    # 实时工作流失败时不必重建（页面数据没变化），也避免无意义的部署记录。
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -30,6 +38,9 @@ jobs:
     steps:
       - name: 检出仓库
         uses: actions/checkout@v4
+        with:
+          # workflow_run 触发时，取触发那次运行的提交（即刚写入最新快照的提交）
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: 配置 Pages
         uses: actions/configure-pages@v5
