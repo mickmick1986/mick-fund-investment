@@ -39,8 +39,9 @@ jobs:
       - name: 检出仓库
         uses: actions/checkout@v4
         with:
-          # workflow_run 触发时，取触发那次运行的提交（即刚写入最新快照的提交）
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          # 必须取 main 最新，不能用 workflow_run.head_sha：后者是"触发那次运行开始时"的提交，
+          # 而最新一帧是那次运行结束时才提交的，用 head_sha 会永远慢一帧（实测 13:50 部署里装的是 13:40 的快照）。
+          ref: main
 
       - name: 配置 Pages
         uses: actions/configure-pages@v5
